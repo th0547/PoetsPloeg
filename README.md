@@ -31,6 +31,19 @@ Open <http://localhost:8080> en log in met **planner@novon.test** / **password**
 - Na wijzigingen in JS/CSS: `docker compose exec app npm run build`
 - Stoppen: `docker compose down` (met `-v` gooi je ook de database weg)
 
+### Windows (Docker Desktop)
+
+- De PHP- en JavaScript-pakketten (`vendor`, `node_modules`) staan in Docker-volumes, niet in je projectmap. Daardoor is de eerste start veel sneller.
+- Nog sneller: zet de projectmap in WSL (bijv. `\\wsl$\Ubuntu\home\<naam>\Novon`) in plaats van op `C:\`.
+- Bleef de eerste start eerder hangen op een time-out (`exceeded the timeout of 300 seconds`)? Haal de nieuwste versie op en begin schoon:
+  ```bash
+  git pull
+  docker compose down -v
+  docker compose up -d --build
+  docker compose logs -f app      # wacht op "ready to handle connections", dan Ctrl+C
+  docker compose exec app php artisan migrate --seed
+  ```
+
 ### In GitHub Codespaces
 
 Dezelfde commando's werken ook in een Codespace (daar zit Docker al in). Open daarna onder **Poorten** de doorgestuurde poort 8080. Dankzij `TRUSTED_PROXIES=*` in `.env.docker` laadt de opmaak dan via https. Gebruik je al een `.env` van vóór deze instelling? Voeg dan `TRUSTED_PROXIES=*` zelf toe.

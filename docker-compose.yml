@@ -8,8 +8,12 @@ services:
       dockerfile: docker/Dockerfile
     volumes:
       - .:/var/www/novon
+      # vendor en node_modules in Docker-volumes: veel sneller dan in de (Windows-)projectmap.
+      - vendor:/var/www/novon/vendor
+      - node_modules:/var/www/novon/node_modules
     environment:
       NOVON_ROLE: app
+      COMPOSER_PROCESS_TIMEOUT: 1800
     depends_on:
       db:
         condition: service_healthy
@@ -30,6 +34,7 @@ services:
       dockerfile: docker/Dockerfile
     volumes:
       - .:/var/www/novon
+      - vendor:/var/www/novon/vendor
     environment:
       NOVON_ROLE: scheduler
     command: ["php", "artisan", "schedule:work"]
@@ -59,3 +64,5 @@ services:
 
 volumes:
   dbdata:
+  vendor:
+  node_modules:
