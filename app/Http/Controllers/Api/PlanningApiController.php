@@ -244,7 +244,7 @@ class PlanningApiController extends Controller
             ->orderBy('starts_at')->get()
             ->map(fn (Shift $s) => [
                 'id' => 'shift-'.$s->id,
-                'title' => sprintf('%s · %s (%d/%d)', $s->building->name, $s->title, $s->assignments_count, $s->required_staff),
+                'title' => sprintf('%s %s · %s (%d/%d)', $s->starts_at->format('H:i'), $s->building->name, $s->title, $s->assignments_count, $s->required_staff),
                 'start' => $s->starts_at->toIso8601String(),
                 'end' => $s->ends_at->toIso8601String(),
                 'color' => $s->building->color,

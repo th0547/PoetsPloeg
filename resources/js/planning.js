@@ -70,6 +70,7 @@ function planningBoard() {
                     const step = 15 * 60 * 1000;
                     return Math.round(date / step) * step;
                 },
+                itemsAlwaysDraggable: { item: true, range: false },
                 editable: { add: false, remove: false, updateTime: true, updateGroup: true, overrideItems: false },
                 groupOrder: 'order',
                 tooltip: { followMouse: true, overflowMethod: 'cap' },

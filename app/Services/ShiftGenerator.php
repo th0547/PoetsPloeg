@@ -49,7 +49,9 @@ class ShiftGenerator
 
         $existing = Shift::query()
             ->whereIn('task_template_id', $templates->pluck('id'))
-            ->whereBetween('date', [$from->toDateString(), $to->toDateString()])
+            // whereDate: SQLite slaat de datum op als "Y-m-d H:i:s"; zo werkt de vergelijking overal.
+            ->whereDate('date', '>=', $from->toDateString())
+            ->whereDate('date', '<=', $to->toDateString())
             ->get(['task_template_id', 'date'])
             ->mapWithKeys(fn (Shift $s) => [$s->task_template_id.'|'.$s->date->toDateString() => true]);
 

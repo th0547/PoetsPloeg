@@ -85,6 +85,7 @@ class DemoSeeder extends Seeder
                 'valid_from' => $validFrom, 'skip_holidays' => true, 'active' => true,
             ]);
             $daily->skills()->attach([$skills['Algemeen']->id, $skills['Sanitair']->id]);
+            $daily->load('skills');
             $this->assignFixed($daily, $employees, $building, $days, $start, $end, $staff);
 
             if ($i % 2 === 0) {
@@ -150,6 +151,7 @@ class DemoSeeder extends Seeder
             }
 
             $template->employees()->attach($employee->id, ['position' => $picked]);
+            $employee->skills()->syncWithoutDetaching($template->skills->pluck('id'));
             $building->employees()->syncWithoutDetaching([$employee->id]);
             foreach ($days as $d) {
                 $this->busy[$employee->id][] = [$d, $s, $e];

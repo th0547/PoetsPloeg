@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
         height: 'auto',
         dayMaxEvents: 6,
         eventDisplay: 'block',
-        eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+        displayEventTime: false, // de begintijd staat al in de titel
         events: '/api/calendar',
         eventClick: (info) => {
             const id = info.event.extendedProps.shiftId;

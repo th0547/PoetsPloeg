@@ -45,6 +45,14 @@ class ShiftGeneratorTest extends TestCase
         $this->assertSame(6, Shift::count());
     }
 
+    public function test_generation_is_idempotent_for_a_single_day(): void
+    {
+        TaskTemplate::factory()->create(['weekdays' => [2]]);
+
+        $this->assertSame(1, $this->generate('2026-10-13', '2026-10-13'));
+        $this->assertSame(0, $this->generate('2026-10-13', '2026-10-13'));
+    }
+
     public function test_every_n_weeks_counts_from_valid_from(): void
     {
         TaskTemplate::factory()->create([
