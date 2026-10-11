@@ -135,7 +135,7 @@ function planningBoard() {
                     zoomMin: 60 * 60 * 1000,
                     timeAxis: this.range === 'month' ? { scale: 'day', step: 1 } : {},
                 });
-                this.timeline.setWindow(from, end, { animation: false });
+                this.timeline.setWindow(...this.visibleWindow(from, end), { animation: false });
             } catch (e) {
                 window.alert(errorMessage(e));
             } finally {
@@ -160,6 +160,29 @@ function planningBoard() {
                 ? `<b>${item.startLabel}</b>`
                 : `<b>${item.startLabel}–${item.endLabel}</b> ${item.content}`;
             return out;
+        },
+
+        /**
+         * Op een smal scherm tonen we een deel van de periode (dag: 8 uur, week: 3 dagen, maand: 7 dagen).
+         * De rest is bereikbaar door horizontaal te vegen; de namenkolom blijft dan in beeld.
+         */
+        visibleWindow(from, end) {
+            if (window.innerWidth >= 1024) return [from, end];
+
+            const hour = 3600 * 1000;
+            const span = { day: 8 * hour, week: 3 * 24 * hour, month: 7 * 24 * hour }[this.range];
+            let start = this.range === 'day'
+                ? new Date(from.getFullYear(), from.getMonth(), from.getDate(), this.firstItemHour())
+                : parseDate(this.date);
+            if (start < from) start = from;
+            if (start.getTime() + span > end.getTime()) start = new Date(end.getTime() - span);
+            return [start, new Date(start.getTime() + span)];
+        },
+
+        /** Vroegste begin-uur van de diensten in beeld (dagweergave), standaard 06:00. */
+        firstItemHour() {
+            const hours = this.items.get({ filter: (i) => i.shiftId }).map((i) => new Date(i.start).getHours());
+            return hours.length ? Math.max(0, Math.min(...hours) - 1) : 6;
         },
 
         setView(view) {

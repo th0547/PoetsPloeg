@@ -107,3 +107,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Smalle schermen: smallere namenkolom; de tijd scrolt binnen de planning zelf (zie planning.js). */
+@media (max-width: 1023px) {
+    .novon-timeline .vis-labelset .vis-label .vis-inner {
+        min-width: 0;
+        max-width: 130px;
+        padding: 4px 6px;
+        font-size: 0.75rem;
+    }
+}

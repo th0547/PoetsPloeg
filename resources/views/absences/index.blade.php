@@ -1,7 +1,7 @@
 <x-app-layout title="Afwezigheid">
     <x-slot name="header">
         <h1 class="page-title">Verlof, ziekte &amp; uitval</h1>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
             <a href="{{ route('absences.index', $past ? [] : ['verleden' => 1]) }}" class="btn-secondary">{{ $past ? 'Huidig en gepland' : 'Verleden' }}</a>
             <a href="{{ route('absences.create') }}" class="btn">+ Afwezigheid / uitval</a>
         </div>

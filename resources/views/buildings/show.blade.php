@@ -5,7 +5,7 @@
             <h1 class="page-title">{{ $building->name }}</h1>
             @unless ($building->active) <span class="chip">inactief</span> @endunless
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
             <a href="{{ route('buildings.index') }}" class="btn-secondary">‹ Panden</a>
             <a href="{{ route('buildings.edit', $building) }}" class="btn-secondary">Bewerken</a>
             <a href="{{ route('shifts.create', ['pand' => $building->id]) }}" class="btn-secondary">+ Losse opdracht</a>

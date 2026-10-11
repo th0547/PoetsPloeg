@@ -49,5 +49,6 @@
         <div class="rounded-lg bg-white shadow-sm overflow-hidden">
             <div x-ref="timeline" class="novon-timeline" :class="range === 'day' ? 'mode-time' : 'mode-slot mode-' + range"></div>
         </div>
+        <p class="text-xs text-gray-500 lg:hidden">Tip: veeg horizontaal over de planning om door de tijd te scrollen; de namen blijven staan. Knijpen (of Ctrl + scrollen) zoomt in en uit.</p>
     </div>
 </x-app-layout>

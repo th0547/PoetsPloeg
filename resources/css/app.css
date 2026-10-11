@@ -12,7 +12,7 @@
     .btn-secondary { @apply inline-flex items-center justify-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50; }
     .btn-danger { @apply inline-flex items-center justify-center gap-1 rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50; }
     .btn-sm { @apply px-2 py-1 text-xs; }
-    .table { @apply min-w-full divide-y divide-gray-200 text-sm; }
+    .table { @apply min-w-full divide-y divide-gray-200 text-sm; min-width: max(100%, 44rem); }
     .table th { @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500; }
     .table td { @apply px-3 py-2 align-top; }
     .chip { @apply inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700; }
@@ -24,6 +24,12 @@
     display: none !important;
 }
 
+/* Maandkalender: op smalle schermen een minimale breedte, de omhullende div scrolt horizontaal. */
+@media (max-width: 767px) {
+    .novon-calendar {
+        min-width: 720px;
+    }
+}
 /* Maandkalender */
 .novon-calendar .fc-event.ev-open {
     border-style: dashed !important;
