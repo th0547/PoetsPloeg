@@ -1,0 +1,109 @@
+/* Gantt-weergave (vis-timeline) */
+.novon-timeline .vis-timeline {
+    border: 0;
+    font-family: inherit;
+    font-size: 0.8rem;
+}
+.novon-timeline .vis-labelset .vis-label .vis-inner {
+    padding: 6px 10px;
+    min-width: 180px;
+}
+.novon-timeline .vis-label.group-open,
+.novon-timeline .vis-foreground .vis-group.group-open {
+    background: #fffbeb;
+}
+.group-dot {
+    display: inline-block;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 9999px;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+}
+.novon-timeline .vis-item {
+    background: #f0fdfa;
+    border-color: #99f6e4;
+    color: #134e4a;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+.novon-timeline .vis-item .vis-item-content {
+    padding: 2px 6px;
+}
+.novon-timeline .vis-item.vis-selected {
+    background: #ccfbf1;
+    border-color: #0d9488;
+}
+.novon-timeline .vis-item.lvl-info {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #334155;
+}
+.novon-timeline .vis-item.lvl-warning {
+    background: #fffbeb;
+    border-color: #f59e0b;
+    color: #78350f;
+}
+.novon-timeline .vis-item.lvl-danger {
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #7f1d1d;
+}
+.novon-timeline .vis-item.item-open,
+.novon-timeline .vis-item.item-has-open {
+    background: #fff7ed;
+    border: 1px dashed #f97316;
+    color: #7c2d12;
+}
+.novon-timeline .vis-item.vis-background.bg-absence {
+    background: repeating-linear-gradient(45deg, rgba(148, 163, 184, 0.25), rgba(148, 163, 184, 0.25) 6px, rgba(148, 163, 184, 0.1) 6px, rgba(148, 163, 184, 0.1) 12px);
+    border: 0;
+    color: #475569;
+}
+.novon-timeline .vis-item.vis-background.bg-holiday {
+    background: rgba(253, 230, 138, 0.35);
+    border: 0;
+    color: #92400e;
+}
+.badge-open {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: 9999px;
+    background: #f97316;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 600;
+}
+.legend {
+    display: inline-block;
+    width: 0.9rem;
+    height: 0.7rem;
+    border-radius: 2px;
+    border: 1px solid;
+}
+.legend-ok { background: #f0fdfa; border-color: #99f6e4; }
+.legend-info { background: #f8fafc; border-color: #cbd5e1; }
+.legend-warning { background: #fffbeb; border-color: #f59e0b; }
+.legend-danger { background: #fef2f2; border-color: #ef4444; }
+.legend-open { background: #fff7ed; border: 1px dashed #f97316; }
+.legend-absence { background: rgba(148, 163, 184, 0.35); border-color: transparent; }
+
+/* Week/maand: dagblokken, niet in lengte aan te passen */
+.novon-timeline.mode-slot .vis-item .vis-drag-left,
+.novon-timeline.mode-slot .vis-item .vis-drag-right {
+    display: none;
+}
+.novon-timeline.mode-slot .vis-item.vis-range {
+    margin-left: 2px;
+}
+.novon-timeline.mode-month .vis-item .vis-item-content {
+    padding: 1px 3px;
+    font-size: 0.7rem;
+}
+.novon-timeline .vis-labelset .vis-label .vis-inner {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
