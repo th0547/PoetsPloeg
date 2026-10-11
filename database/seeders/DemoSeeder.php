@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\Skill;
 use App\Models\TaskTemplate;
 use App\Models\User;
+use App\Services\AbsenceService;
 use App\Services\ShiftGenerator;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
@@ -128,7 +129,7 @@ class DemoSeeder extends Seeder
                 'employee_id' => $sick->id, 'type' => 'ziek',
                 'starts_at' => $today, 'ends_at' => $today->addDays(2)->endOfDay()->startOfMinute(), 'note' => 'Griep',
             ]);
-            app(\App\Services\AbsenceService::class)->apply($absence);
+            app(AbsenceService::class)->apply($absence);
         }
     }
 
@@ -146,7 +147,7 @@ class DemoSeeder extends Seeder
             $fitsPattern = $employee->availabilityPatterns->where('weekday', $days[0])
                 ->contains(fn ($p) => $this->minutes($p->start_time) <= $s && $this->minutes($p->end_time) >= $e);
             $free = collect($this->busy[$employee->id])->doesntContain(fn ($b) => in_array($b[0], $days) && $b[1] < $e && $b[2] > $s);
-            if (! $fitsPattern || ! $free || $this->hours[$employee->id] + $weekly > $employee->contract_hours_max) {
+            if (! $fitsPattern || ! $free || $employee->contract_hours_max < $this->hours[$employee->id] + $weekly) {
                 continue;
             }
 

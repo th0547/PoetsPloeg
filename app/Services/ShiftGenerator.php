@@ -17,9 +17,7 @@ use Illuminate\Support\Facades\DB;
  */
 class ShiftGenerator
 {
-    public function __construct(private DutchHolidays $holidays)
-    {
-    }
+    public function __construct(private DutchHolidays $holidays) {}
 
     /**
      * Maak ontbrekende diensten aan voor alle (of de opgegeven) sjablonen tussen from en to (inclusief).

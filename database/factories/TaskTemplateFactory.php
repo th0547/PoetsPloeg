@@ -3,10 +3,11 @@
 namespace Database\Factories;
 
 use App\Models\Building;
+use App\Models\TaskTemplate;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends Factory<\App\Models\TaskTemplate>
+ * @extends Factory<TaskTemplate>
  */
 class TaskTemplateFactory extends Factory
 {

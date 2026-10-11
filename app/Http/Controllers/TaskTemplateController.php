@@ -15,9 +15,7 @@ use Illuminate\View\View;
 
 class TaskTemplateController extends Controller
 {
-    public function __construct(private ShiftGenerator $generator)
-    {
-    }
+    public function __construct(private ShiftGenerator $generator) {}
 
     public function create(Building $building): View
     {

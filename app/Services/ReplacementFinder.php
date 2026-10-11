@@ -10,9 +10,7 @@ use App\Models\Shift;
  */
 class ReplacementFinder
 {
-    public function __construct(private ConflictChecker $checker)
-    {
-    }
+    public function __construct(private ConflictChecker $checker) {}
 
     /**
      * @return array{candidates: list<array>, excluded: list<array>}

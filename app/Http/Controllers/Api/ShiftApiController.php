@@ -18,9 +18,7 @@ use Illuminate\Support\Facades\DB;
 
 class ShiftApiController extends Controller
 {
-    public function __construct(private ConflictChecker $checker)
-    {
-    }
+    public function __construct(private ConflictChecker $checker) {}
 
     public function show(Shift $shift): JsonResponse
     {

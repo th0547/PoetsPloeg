@@ -26,7 +26,7 @@ class EmployeeController extends Controller
 
     public function create(): View
     {
-        return $this->form(new Employee(['active' => true, 'color' => sprintf('#%06x', random_int(0x222222, 0xcccccc))]));
+        return $this->form(new Employee(['active' => true, 'color' => sprintf('#%06x', random_int(0x222222, 0xCCCCCC))]));
     }
 
     public function store(Request $request): RedirectResponse

@@ -24,7 +24,7 @@ class BuildingController extends Controller
     public function create(): View
     {
         return view('buildings.form', [
-            'building' => new Building(['active' => true, 'color' => sprintf('#%06x', random_int(0x222222, 0xcccccc))]),
+            'building' => new Building(['active' => true, 'color' => sprintf('#%06x', random_int(0x222222, 0xCCCCCC))]),
             'employees' => Employee::active()->orderBy('name')->get(),
         ]);
     }

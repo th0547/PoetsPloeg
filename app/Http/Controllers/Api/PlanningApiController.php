@@ -22,8 +22,7 @@ class PlanningApiController extends Controller
         private ShiftGenerator $generator,
         private ConflictChecker $checker,
         private DutchHolidays $holidays,
-    ) {
-    }
+    ) {}
 
     /**
      * Gegevens voor de Gantt-weergave, gegroepeerd per medewerker of per pand.
