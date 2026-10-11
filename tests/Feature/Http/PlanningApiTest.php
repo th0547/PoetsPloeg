@@ -88,6 +88,18 @@ class PlanningApiTest extends TestCase
         $this->assertSame('19:00', $shift->fresh()->starts_at->format('H:i'));
     }
 
+    public function test_move_by_whole_days_keeps_local_times_across_dst(): void
+    {
+        // 25 oktober 2026 gaat de wintertijd in.
+        $shift = Shift::factory()->at('2026-10-23', '18:00', '20:00')->create();
+
+        $this->postJson('/api/planning/move', ['shift_id' => $shift->id, 'shift_days' => 3])
+            ->assertOk()->assertJson(['ok' => true]);
+
+        $this->assertSame('2026-10-26 18:00', $shift->fresh()->starts_at->format('Y-m-d H:i'));
+        $this->assertSame('2026-10-26 20:00', $shift->fresh()->ends_at->format('Y-m-d H:i'));
+    }
+
     public function test_open_slot_drop_rejected_when_shift_is_full(): void
     {
         $shift = Shift::factory()->at('2026-10-12', '18:00', '20:00')->create();

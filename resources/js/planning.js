@@ -1,6 +1,6 @@
 import axios from 'axios';
 import moment from 'moment';
-import 'moment/locale/nl';
+import 'moment/dist/locale/nl';
 import { DataSet } from 'vis-data/peer';
 import { Timeline } from 'vis-timeline/peer';
 import 'vis-timeline/styles/vis-timeline-graph2d.css';
@@ -148,18 +148,16 @@ function planningBoard() {
          */
         present(item) {
             if (item.type === 'background' || !item.shiftId) return item;
-            const start = new Date(item.start);
-            const end = new Date(item.end);
-            const time = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-            const out = { ...item, realStart: item.start, realEnd: item.end };
+            const out = { ...item };
             if (this.range === 'day') return out;
 
-            const day = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+            // Tijden en dag komen van de server (Nederlandse tijd), ongeacht de tijdzone van de browser.
+            const day = parseDate(item.day);
             out.start = day;
             out.end = addDays(day, 1);
             out.content = this.range === 'month'
-                ? `<b>${time(start)}</b>`
-                : `<b>${time(start)}–${time(end)}</b> ${item.content}`;
+                ? `<b>${item.startLabel}</b>`
+                : `<b>${item.startLabel}–${item.endLabel}</b> ${item.content}`;
             return out;
         },
 
@@ -190,28 +188,21 @@ function planningBoard() {
         async onMove(item, callback, confirm = false) {
             const original = this.items.get(item.id);
             const toGroup = item.group;
-            let start = new Date(item.start);
-            let end = new Date(item.end);
-            if (this.range !== 'day') {
-                // Verschuif de echte tijden met het aantal verplaatste dagen.
+            const payload = { shift_id: item.shiftId };
+            if (this.range === 'day') {
+                payload.starts_at = new Date(item.start).toISOString();
+                payload.ends_at = new Date(item.end).toISOString();
+            } else {
+                // Dagblok verplaatst: de server schuift de dienst dit aantal dagen op (zelfde tijden).
                 const from = new Date(original.start);
                 const to = new Date(item.start);
-                const days = Math.round((Date.UTC(to.getFullYear(), to.getMonth(), to.getDate()) - Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())) / 86400000);
-                const shiftBy = (iso) => {
-                    const d = new Date(iso);
-                    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days, d.getHours(), d.getMinutes());
-                };
-                start = shiftBy(original.realStart);
-                end = shiftBy(original.realEnd);
+                payload.shift_days = Math.round((Date.UTC(to.getFullYear(), to.getMonth(), to.getDate()) - Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())) / 86400000);
             }
-            const payload = {
-                shift_id: item.shiftId,
-                starts_at: start.toISOString(),
-                ends_at: end.toISOString(),
+            Object.assign(payload, {
                 from_employee_id: this.view === 'employee' ? original.employeeId : null,
                 to_employee_id: this.view === 'employee' ? (toGroup === 'open' ? null : toGroup) : null,
                 confirm,
-            };
+            });
 
             try {
                 const { data } = await axios.post('/api/planning/move', payload);

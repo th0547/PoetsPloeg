@@ -156,16 +156,23 @@ class PlanningApiController extends Controller
             'shift_id' => ['required', 'exists:shifts,id'],
             'from_employee_id' => ['nullable', 'exists:employees,id'],
             'to_employee_id' => ['nullable', 'exists:employees,id'],
-            'starts_at' => ['required', 'date'],
-            'ends_at' => ['required', 'date', 'after:starts_at'],
+            'shift_days' => ['nullable', 'integer', 'between:-366,366'],
+            'starts_at' => ['required_without:shift_days', 'date'],
+            'ends_at' => ['required_without:shift_days', 'date', 'after:starts_at'],
             'confirm' => ['boolean'],
         ]);
 
         $shift = Shift::with(['skills', 'assignments.employee'])->findOrFail($data['shift_id']);
         $from = isset($data['from_employee_id']) ? (int) $data['from_employee_id'] : null;
         $to = isset($data['to_employee_id']) ? (int) $data['to_employee_id'] : null;
-        $startsAt = CarbonImmutable::parse($data['starts_at'])->setTimezone(config('app.timezone'))->seconds(0);
-        $endsAt = CarbonImmutable::parse($data['ends_at'])->setTimezone(config('app.timezone'))->seconds(0);
+        if (isset($data['shift_days'])) {
+            // Week-/maandweergave: dienst een aantal dagen opschuiven met dezelfde (lokale) tijden.
+            $startsAt = CarbonImmutable::instance($shift->starts_at)->addDays((int) $data['shift_days']);
+            $endsAt = CarbonImmutable::instance($shift->ends_at)->addDays((int) $data['shift_days']);
+        } else {
+            $startsAt = CarbonImmutable::parse($data['starts_at'])->setTimezone(config('app.timezone'))->seconds(0);
+            $endsAt = CarbonImmutable::parse($data['ends_at'])->setTimezone(config('app.timezone'))->seconds(0);
+        }
         $timeChanged = ! $startsAt->equalTo($shift->starts_at) || ! $endsAt->equalTo($shift->ends_at);
         $employeeChanged = $from !== $to;
 
@@ -280,6 +287,9 @@ class PlanningApiController extends Controller
             'group' => $group,
             'start' => $shift->starts_at->toIso8601String(),
             'end' => $shift->ends_at->toIso8601String(),
+            'day' => $shift->starts_at->toDateString(),
+            'startLabel' => $shift->starts_at->format('H:i'),
+            'endLabel' => $shift->ends_at->format('H:i'),
             'content' => e($label),
             'title' => e($title),
             'className' => trim(implode(' ', array_filter([$extraClass, $level ? 'lvl-'.$level : null]))),
