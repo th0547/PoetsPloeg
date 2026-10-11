@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+    .card { @apply rounded-lg bg-white shadow-sm; }
+    .card-body { @apply p-4 sm:p-6; }
+    .label { @apply block text-sm font-medium text-gray-700; }
+    .input { @apply mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500; }
+    .checkbox { @apply rounded border-gray-300 text-teal-600 shadow-sm focus:ring-teal-500; }
+    .btn { @apply inline-flex items-center justify-center gap-1 rounded-md bg-teal-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1; }
+    .btn-secondary { @apply inline-flex items-center justify-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50; }
+    .btn-danger { @apply inline-flex items-center justify-center gap-1 rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50; }
+    .btn-sm { @apply px-2 py-1 text-xs; }
+    .table { @apply min-w-full divide-y divide-gray-200 text-sm; }
+    .table th { @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500; }
+    .table td { @apply px-3 py-2 align-top; }
+    .chip { @apply inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700; }
+    .page-title { @apply text-xl font-semibold text-gray-800; }
+    .field-error { @apply mt-1 text-xs text-red-600; }
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+/* Maandkalender */
+.novon-calendar .fc-event.ev-open {
+    border-style: dashed !important;
+    border-width: 2px !important;
+    border-color: #f97316 !important;
+}
+.novon-calendar .fc-event.ev-absence {
+    opacity: 0.85;
+}
+.novon-calendar .fc-event {
+    cursor: pointer;
+    font-size: 0.72rem;
+}
+.novon-calendar .fc-toolbar-title {
+    text-transform: capitalize;
+}
