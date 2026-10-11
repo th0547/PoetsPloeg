@@ -31,6 +31,10 @@ Open <http://localhost:8080> en log in met **planner@novon.test** / **password**
 - Na wijzigingen in JS/CSS: `docker compose exec app npm run build`
 - Stoppen: `docker compose down` (met `-v` gooi je ook de database weg)
 
+### In GitHub Codespaces
+
+Dezelfde commando's werken ook in een Codespace (daar zit Docker al in). Open daarna onder **Poorten** de doorgestuurde poort 8080. Dankzij `TRUSTED_PROXIES=*` in `.env.docker` laadt de opmaak dan via https. Gebruik je al een `.env` van vóór deze instelling? Voeg dan `TRUSTED_PROXIES=*` zelf toe.
+
 ## Lokaal zonder Docker
 
 ```bash
