@@ -1,0 +1,12 @@
+# /etc/systemd/system/novon-deploy.path
+# Start novon-deploy.service zodra het triggerbestand verschijnt
+# (bijv. aangemaakt door een webhook, of handmatig: touch /var/www/novon/storage/app/deploy.trigger).
+[Unit]
+Description=Novon deploy trigger
+
+[Path]
+PathExists=/var/www/novon/storage/app/deploy.trigger
+Unit=novon-deploy.service
+
+[Install]
+WantedBy=multi-user.target
