@@ -36,6 +36,8 @@ Route::middleware(['auth', 'planner'])->group(function () {
     Route::resource('panden', BuildingController::class)
         ->parameters(['panden' => 'building'])->names('buildings');
 
+    Route::put('panden/{building}/bezetting', [BuildingController::class, 'updateStaffing'])->name('buildings.staffing');
+
     Route::resource('panden.taken', TaskTemplateController::class)
         ->parameters(['panden' => 'building', 'taken' => 'template'])
         ->names('buildings.templates')->except(['index', 'show'])->scoped();

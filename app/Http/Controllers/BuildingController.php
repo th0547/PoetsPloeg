@@ -5,8 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Shift;
+use App\Services\DutchHolidays;
+use App\Services\ShiftGenerator;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class BuildingController extends Controller
@@ -37,19 +41,99 @@ class BuildingController extends Controller
         return redirect()->route('buildings.show', $building)->with('status', 'Pand aangemaakt. Voeg nu de vaste taken toe.');
     }
 
-    public function show(Building $building): View
+    public function show(Request $request, Building $building, ShiftGenerator $generator, DutchHolidays $holidays): View
     {
         $building->load(['taskTemplates.skills', 'taskTemplates.employees', 'employees']);
 
-        $upcoming = Shift::query()->active()
+        // Weekrooster: maandag t/m zondag van de gekozen week.
+        $weekStart = rescue(fn () => CarbonImmutable::parse($request->query('week', 'today')), CarbonImmutable::today(), false)
+            ->startOfWeek();
+        $weekEnd = $weekStart->addDays(6);
+        $generator->generate($weekStart, $weekEnd);
+
+        $shifts = Shift::query()->active()
             ->where('building_id', $building->id)
-            ->where('starts_at', '>=', now()->startOfDay())
+            ->where('starts_at', '>=', $weekStart)
+            ->where('starts_at', '<', $weekEnd->addDay())
             ->with('assignments.employee')
             ->orderBy('starts_at')
-            ->limit(15)
             ->get();
 
-        return view('buildings.show', compact('building', 'upcoming'));
+        // Werkdagen altijd tonen, het weekend alleen als er dan diensten zijn.
+        $days = collect(range(0, 6))->map(fn ($i) => $weekStart->addDays($i))
+            ->filter(fn (CarbonImmutable $d) => ! $d->isWeekend()
+                || $shifts->contains(fn (Shift $s) => $s->starts_at->isSameDay($d)))
+            ->values();
+
+        // [rij-sleutel][Y-m-d] => diensten; rij-sleutel is het template-id of 'los' voor losse opdrachten.
+        $grid = $shifts->groupBy(fn (Shift $s) => $s->task_template_id ?? 'los')
+            ->map(fn ($rows) => $rows->groupBy(fn (Shift $s) => $s->starts_at->toDateString()));
+
+        $staffEmployees = Employee::query()
+            ->where(fn ($q) => $q->where('active', true)
+                ->orWhereIn('id', $building->taskTemplates->flatMap->employees->pluck('id')))
+            ->orderBy('name')
+            ->get();
+        $knownIds = $building->employees->pluck('id')->all();
+
+        return view('buildings.show', [
+            'building' => $building,
+            'weekStart' => $weekStart,
+            'days' => $days,
+            'grid' => $grid,
+            'holidays' => $holidays->between($weekStart, $weekEnd),
+            'staffEmployees' => $staffEmployees->sortBy(fn ($e) => [in_array($e->id, $knownIds) ? 0 : 1, $e->name])->values(),
+            'knownIds' => $knownIds,
+        ]);
+    }
+
+    /**
+     * Bezettingstabel: vaste bezetting en aantal personen van alle taken van een pand in één keer opslaan.
+     */
+    public function updateStaffing(Request $request, Building $building, ShiftGenerator $generator): RedirectResponse
+    {
+        $templates = $building->taskTemplates()->with('employees:id')->get()->keyBy('id');
+
+        $data = $request->validate([
+            'staff' => ['array'],
+            'staff.*' => ['integer', 'min:1', 'max:50'],
+            'fixed' => ['array'],
+            'fixed.*' => ['array'],
+            'fixed.*.*' => ['integer', 'exists:employees,id'],
+        ], [], ['staff.*' => 'aantal personen']);
+
+        $unknown = collect(array_keys($data['staff'] ?? []))->merge(array_keys($data['fixed'] ?? []))
+            ->reject(fn ($id) => $templates->has((int) $id));
+        abort_if($unknown->isNotEmpty(), 422, 'Onbekende taak voor dit pand.');
+
+        $changed = collect();
+        DB::transaction(function () use ($templates, $data, $building, $changed) {
+            foreach ($templates as $id => $template) {
+                $employeeIds = collect($data['fixed'][$id] ?? [])->map(fn ($e) => (int) $e)->unique()->values();
+                $staff = (int) ($data['staff'][$id] ?? $template->required_staff);
+
+                $sameStaff = $staff === $template->required_staff;
+                $sameEmployees = $employeeIds->sort()->values()->all() === $template->employees->pluck('id')->sort()->values()->all();
+                if ($sameStaff && $sameEmployees) {
+                    continue;
+                }
+
+                $template->update(['required_staff' => $staff]);
+                $template->employees()->sync($employeeIds->mapWithKeys(fn ($e, $i) => [$e => ['position' => $i]])->all());
+                // Wie vast op een taak staat, kent het pand.
+                $building->employees()->syncWithoutDetaching($employeeIds->all());
+                $changed->push($template);
+            }
+        });
+
+        foreach ($changed as $template) {
+            $generator->regenerateTemplate($template);
+        }
+
+        return redirect()->route('buildings.show', $building)->with('status', $changed->isEmpty()
+            ? 'Geen wijzigingen in de bezetting.'
+            : sprintf('Bezetting opgeslagen voor %d %s. Toekomstige diensten zijn bijgewerkt (handmatig aangepaste diensten blijven staan).',
+                $changed->count(), $changed->count() === 1 ? 'taak' : 'taken'));
     }
 
     public function edit(Building $building): View
