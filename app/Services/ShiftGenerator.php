@@ -43,7 +43,7 @@ class ShiftGenerator
         if ($templates->isEmpty()) {
             return 0;
         }
-        $templates->load(['skills:id', 'employees' => fn ($q) => $q->where('active', true)]);
+        $templates->load(['skills:id', 'employees' => fn ($q) => $q->where('active', true)->with('availabilityPatterns')]);
 
         $existing = Shift::query()
             ->whereIn('task_template_id', $templates->pluck('id'))
@@ -53,7 +53,7 @@ class ShiftGenerator
             ->get(['task_template_id', 'date'])
             ->mapWithKeys(fn (Shift $s) => [$s->task_template_id.'|'.$s->date->toDateString() => true]);
 
-        $absences = Absence::query()
+        $absences = Absence::query()->effective()
             ->whereIn('employee_id', $templates->flatMap->employees->pluck('id')->unique())
             ->where('starts_at', '<', $to->addDays(2))
             ->where('ends_at', '>', $from)
@@ -197,7 +197,7 @@ class ShiftGenerator
             $shift->skills()->attach($template->skills->pluck('id'));
         }
 
-        // Vaste bezetting invullen, behalve wie op dat moment afwezig is.
+        // Vaste bezetting invullen, behalve wie op dat moment afwezig is of volgens het weekpatroon niet kan.
         $assigned = 0;
         foreach ($template->employees as $employee) {
             if ($assigned >= $template->required_staff) {
@@ -206,7 +206,7 @@ class ShiftGenerator
             $isAbsent = ($absences[$employee->id] ?? collect())->contains(
                 fn (Absence $a) => $a->starts_at->lt($endsAt) && $a->ends_at->gt($startsAt)
             );
-            if ($isAbsent) {
+            if ($isAbsent || AvailabilityCheck::isOutside($employee->availabilityPatterns, $startsAt, $endsAt)) {
                 continue;
             }
             $shift->assignments()->create(['employee_id' => $employee->id, 'source' => 'fixed']);

@@ -8,8 +8,11 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Verwerkt verlof en uitval: de medewerker wordt van getroffen diensten gehaald,
- * zodat die als open dienst zichtbaar worden en een vervanger kan worden gezocht.
+ * Verwerkt verlof, uitval en verlofverzoeken.
+ *
+ * - Verlof/ziek/overig: de medewerker wordt direct van getroffen diensten gehaald.
+ * - Verlofverzoek: de medewerker blijft ingepland tot er per dienst een vervanger is gevonden;
+ *   zodra alle diensten vervangen zijn, wordt het verzoek automatisch goedgekeurd (en wordt het verlof).
  */
 class AbsenceService
 {
@@ -47,5 +50,85 @@ class AbsenceService
         });
 
         return $shifts;
+    }
+
+    /**
+     * Nieuw verlofverzoek: leg vast voor welke diensten een vervanger nodig is.
+     * Zonder diensten in de periode wordt het verzoek meteen goedgekeurd.
+     */
+    public function submitRequest(Absence $absence): void
+    {
+        $absence->update(['status' => 'pending']);
+        $this->evaluate($absence);
+    }
+
+    /**
+     * Per dienst van het verzoek: 'todo' (aanvrager staat er nog op), 'open' (aanvrager eraf, plek nog open)
+     * of 'done' (vervangen of dienst geannuleerd).
+     *
+     * @return Collection<int, array{shift: Shift, state: string}>
+     */
+    public function requestShifts(Absence $absence): Collection
+    {
+        return $absence->shifts()
+            ->with(['building', 'assignments.employee'])
+            ->orderBy('starts_at')
+            ->get()
+            ->map(function (Shift $shift) use ($absence) {
+                $state = match (true) {
+                    $shift->cancelled_at !== null => 'done',
+                    $shift->assignments->contains('employee_id', $absence->employee_id) => 'todo',
+                    $shift->openSlots() > 0 => 'open',
+                    default => 'done',
+                };
+
+                return ['shift' => $shift, 'state' => $state];
+            });
+    }
+
+    /**
+     * Keur een openstaand verzoek goed als alle diensten vervangen zijn.
+     *
+     * @return bool of het verzoek (nu) is goedgekeurd
+     */
+    public function evaluate(Absence $absence): bool
+    {
+        if (! $absence->isPending()) {
+            return $absence->status === 'approved';
+        }
+
+        // Diensten die er sinds het indienen bij zijn gekomen (bijv. nieuw ingepland) ook meenemen.
+        $absence->shifts()->syncWithoutDetaching($this->affectedShifts($absence)->pluck('id'));
+
+        $pending = $this->requestShifts($absence)->contains(fn ($row) => $row['state'] !== 'done');
+        if ($pending) {
+            return false;
+        }
+
+        $absence->update(['status' => 'approved', 'type' => 'verlof', 'decided_at' => now()]);
+        // Voor de zekerheid: de medewerker van eventuele overige diensten in de periode halen.
+        $this->apply($absence);
+
+        return true;
+    }
+
+    /**
+     * Na een wijziging in de bezetting van een dienst: openstaande verzoeken die erbij horen opnieuw beoordelen.
+     *
+     * @return Collection<int, Absence> de verzoeken die daardoor zijn goedgekeurd
+     */
+    public function evaluateForShift(Shift $shift): Collection
+    {
+        return Absence::query()
+            ->where('status', 'pending')
+            ->whereHas('shifts', fn ($q) => $q->where('shifts.id', $shift->id))
+            ->get()
+            ->filter(fn (Absence $a) => $this->evaluate($a))
+            ->values();
+    }
+
+    public function reject(Absence $absence): void
+    {
+        $absence->update(['status' => 'rejected', 'decided_at' => now()]);
     }
 }

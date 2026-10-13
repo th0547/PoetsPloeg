@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\Shift;
 use App\Models\ShiftAssignment;
 use App\Models\Skill;
+use App\Services\AbsenceService;
 use App\Services\ConflictChecker;
 use App\Services\ReplacementFinder;
 use App\Services\ShiftGenerator;
@@ -18,7 +19,7 @@ use Illuminate\Support\Facades\DB;
 
 class ShiftApiController extends Controller
 {
-    public function __construct(private ConflictChecker $checker) {}
+    public function __construct(private ConflictChecker $checker, private AbsenceService $absences) {}
 
     public function show(Shift $shift): JsonResponse
     {
@@ -82,12 +83,17 @@ class ShiftApiController extends Controller
         $data = $request->validate([
             'employee_id' => ['required', 'exists:employees,id'],
             'source' => ['nullable', 'in:manual,replacement'],
+            'replace_employee_id' => ['nullable', 'exists:employees,id'],
             'confirm' => ['boolean'],
         ]);
         $employeeId = (int) $data['employee_id'];
+        $replaceId = isset($data['replace_employee_id']) ? (int) $data['replace_employee_id'] : null;
 
         if ($shift->assignments()->where('employee_id', $employeeId)->exists()) {
             return response()->json(['message' => 'Deze medewerker staat al op deze dienst.'], 422);
+        }
+        if ($replaceId && ! $shift->assignments()->where('employee_id', $replaceId)->exists()) {
+            return response()->json(['message' => 'De te vervangen medewerker staat niet (meer) op deze dienst.'], 422);
         }
 
         $result = $this->checker->forCandidate($shift, $employeeId);
@@ -95,16 +101,25 @@ class ShiftApiController extends Controller
             return response()->json(['needs_confirmation' => true, 'warnings' => $result['warnings']]);
         }
 
-        $shift->assignments()->create(['employee_id' => $employeeId, 'source' => $data['source'] ?? 'manual']);
-        $shift->update(['is_modified' => true]);
+        DB::transaction(function () use ($shift, $employeeId, $replaceId, $data) {
+            if ($replaceId) {
+                $shift->assignments()->where('employee_id', $replaceId)->delete();
+            }
+            $shift->assignments()->create(['employee_id' => $employeeId, 'source' => $replaceId ? 'replacement' : ($data['source'] ?? 'manual')]);
+            $shift->update(['is_modified' => true]);
+        });
+        $approved = $this->absences->evaluateForShift($shift);
 
-        return response()->json($this->present($shift->fresh()));
+        return response()->json($this->present($shift->fresh()) + [
+            'approved_requests' => $approved->map(fn ($a) => $a->employee->name)->values(),
+        ]);
     }
 
     public function unassign(Shift $shift, Employee $employee): JsonResponse
     {
         $shift->assignments()->where('employee_id', $employee->id)->delete();
         $shift->update(['is_modified' => true]);
+        $this->absences->evaluateForShift($shift);
 
         return response()->json($this->present($shift->fresh()));
     }

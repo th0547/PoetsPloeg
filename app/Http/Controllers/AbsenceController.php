@@ -18,6 +18,7 @@ class AbsenceController extends Controller
     {
         $past = $request->boolean('verleden');
         $absences = Absence::query()->with('employee')
+            ->when($request->query('status'), fn ($q, $status) => $q->where('status', $status))
             ->when(! $past, fn ($q) => $q->where('ends_at', '>=', now()->startOfDay()))
             ->when($past, fn ($q) => $q->where('ends_at', '<', now()->startOfDay()))
             ->orderBy($past ? 'ends_at' : 'starts_at', $past ? 'desc' : 'asc')
@@ -61,6 +62,17 @@ class AbsenceController extends Controller
             'ends_at' => $endsAt,
             'note' => $data['note'] ?? null,
         ]);
+
+        if ($absence->type === 'verzoek') {
+            $service->submitRequest($absence);
+            $count = $absence->shifts()->count();
+
+            return redirect()->route('absences.show', $absence)->with('status', $absence->fresh()->status === 'approved'
+                ? 'Verlofverzoek direct goedgekeurd: er stonden geen diensten in deze periode.'
+                : sprintf('Verlofverzoek ingediend. Zoek voor %d %s een vervanger; daarna wordt het verlof automatisch goedgekeurd.',
+                    $count, $count === 1 ? 'dienst' : 'diensten'));
+        }
+
         $affected = $service->apply($absence);
 
         return redirect()->route('absences.show', $absence)->with('status', $affected->isEmpty()
@@ -68,9 +80,19 @@ class AbsenceController extends Controller
             : sprintf('Afwezigheid geregistreerd. %s is van %d dienst(en) gehaald; zoek hieronder een vervanger.', $absence->employee->name, $affected->count()));
     }
 
-    public function show(Absence $absence): View
+    public function show(Absence $absence, AbsenceService $service): View
     {
         $absence->load('employee');
+
+        if ($absence->type === 'verzoek' || $absence->shifts()->exists()) {
+            $service->evaluate($absence);
+            $absence->refresh();
+
+            return view('absences.request', [
+                'absence' => $absence,
+                'rows' => $service->requestShifts($absence),
+            ]);
+        }
 
         // Alle diensten in deze periode met open plekken, zodat de planner direct vervangers kan zoeken.
         $openShifts = Shift::query()->active()
@@ -84,6 +106,15 @@ class AbsenceController extends Controller
             ->values();
 
         return view('absences.show', compact('absence', 'openShifts'));
+    }
+
+    public function reject(Absence $absence, AbsenceService $service): RedirectResponse
+    {
+        abort_unless($absence->isPending(), 422, 'Alleen een openstaand verlofverzoek kan worden afgewezen.');
+        $service->reject($absence);
+
+        return redirect()->route('absences.show', $absence)
+            ->with('status', 'Verlofverzoek afgewezen. '.$absence->employee->name.' blijft ingepland op de diensten die nog niet vervangen waren.');
     }
 
     public function destroy(Absence $absence): RedirectResponse

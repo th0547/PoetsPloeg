@@ -1,5 +1,5 @@
 {{-- Zijpaneel met details van een dienst; te openen via window.dispatchEvent(new CustomEvent('open-shift', {detail: {id}})) --}}
-<div x-data="shiftPanel()" x-cloak @open-shift.window="open($event.detail.id, $event.detail.candidates)" @keydown.escape.window="close()">
+<div x-data="shiftPanel()" x-cloak @open-shift.window="open($event.detail.id, $event.detail.candidates, $event.detail.replace)" @keydown.escape.window="close()">
     <div x-show="visible" x-transition.opacity class="fixed inset-0 z-40 bg-gray-900/30" @click="close()"></div>
     <aside x-show="visible" x-transition:enter="transition transform duration-200" x-transition:enter-start="translate-x-full"
            x-transition:leave="transition transform duration-150" x-transition:leave-end="translate-x-full"
@@ -19,6 +19,14 @@
         </div>
 
         <div class="flex-1 overflow-y-auto px-5 py-4 space-y-6" x-show="shift">
+            <template x-if="notice">
+                <div class="rounded-md bg-teal-50 border border-teal-200 px-3 py-2 text-sm text-teal-800" x-text="notice"></div>
+            </template>
+            <template x-if="replacing()">
+                <div class="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900">
+                    Vervanger zoeken voor <strong x-text="replacing().name"></strong> (verlofverzoek). De gekozen medewerker neemt de plek direct over.
+                </div>
+            </template>
             <template x-if="error">
                 <div class="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-800" x-text="error"></div>
             </template>
@@ -71,8 +79,8 @@
                                     <a x-show="c.phone" :href="'tel:' + c.phone" class="text-xs text-teal-700 hover:underline" x-text="c.phone"></a>
                                 </div>
                                 <button type="button" class="rounded-md border border-teal-600 px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-600 hover:text-white"
-                                        :disabled="shift?.open_slots === 0" :class="shift?.open_slots === 0 ? 'opacity-40 cursor-not-allowed' : ''"
-                                        @click="assign(c.id, 'replacement')">Inplannen</button>
+                                        :disabled="shift?.open_slots === 0 && !replacing()" :class="shift?.open_slots === 0 && !replacing() ? 'opacity-40 cursor-not-allowed' : ''"
+                                        @click="assign(c.id, 'replacement')" x-text="replacing() ? 'Vervangt ' + replacing().name.split(' ')[0] : 'Inplannen'">Inplannen</button>
                             </div>
                             <div class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
                                 <template x-for="r in c.reasons">

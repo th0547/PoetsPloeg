@@ -6,6 +6,7 @@ use App\Models\AvailabilityPattern;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Skill;
+use App\Services\AvailabilityEnforcer;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,8 @@ use Illuminate\View\View;
 
 class EmployeeController extends Controller
 {
+    public function __construct(private AvailabilityEnforcer $enforcer) {}
+
     public function index(Request $request): View
     {
         $employees = Employee::query()
@@ -39,6 +42,18 @@ class EmployeeController extends Controller
         return redirect()->route('employees.edit', $employee)->with('status', 'Medewerker aangemaakt.');
     }
 
+    /** Na opslaan: medewerker van diensten buiten de (nieuwe) beschikbaarheid halen. */
+    private function releaseMessage(Employee $employee, string $message): string
+    {
+        $released = $this->enforcer->release($employee->fresh());
+        if ($released->isEmpty()) {
+            return $message;
+        }
+
+        return $message.sprintf(' %s is van %d %s gehaald die buiten de beschikbaarheid vallen; die staan nu bij Open diensten.',
+            $employee->name, $released->count(), $released->count() === 1 ? 'dienst' : 'diensten');
+    }
+
     public function edit(Employee $employee): View
     {
         return $this->form($employee);
@@ -48,7 +63,7 @@ class EmployeeController extends Controller
     {
         DB::transaction(fn () => $this->save($employee, $request));
 
-        return redirect()->route('employees.edit', $employee)->with('status', 'Medewerker opgeslagen.');
+        return redirect()->route('employees.edit', $employee)->with('status', $this->releaseMessage($employee, 'Medewerker opgeslagen.'));
     }
 
     public function destroy(Employee $employee): RedirectResponse

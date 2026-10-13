@@ -118,7 +118,7 @@ class ConflictChecker
             ->get()
             ->keyBy('id');
 
-        $this->absences = Absence::query()
+        $this->absences = Absence::query()->notRejected()
             ->whereIn('employee_id', $employeeIds)
             ->where('starts_at', '<', $windowEnd)
             ->where('ends_at', '>', $windowStart)
@@ -167,8 +167,16 @@ class ConflictChecker
             $warnings[] = $this->warning('inactive', self::WARNING, 'Medewerker is niet actief');
         }
 
-        $absence = ($this->absences[$employeeId] ?? collect())
-            ->first(fn (Absence $a) => $a->starts_at->lt($end) && $a->ends_at->gt($start));
+        $overlapping = ($this->absences[$employeeId] ?? collect())
+            ->filter(fn (Absence $a) => $a->starts_at->lt($end) && $a->ends_at->gt($start));
+        $absence = $overlapping->first(fn (Absence $a) => ! $a->isPending());
+        $request = $overlapping->first(fn (Absence $a) => $a->isPending());
+        if ($request) {
+            $warnings[] = $this->warning('request', self::INFO, sprintf(
+                'Verlofverzoek ingediend (%s t/m %s), zoek een vervanger',
+                $request->starts_at->format('d-m'), $request->ends_at->format('d-m'),
+            ));
+        }
         if ($absence) {
             $warnings[] = $this->warning('absent', self::DANGER, sprintf(
                 'Afwezig (%s %s t/m %s)',
@@ -187,7 +195,7 @@ class ConflictChecker
             ));
         }
 
-        [$availability, $availabilityReason] = $this->availability($employee, $start, $end);
+        [$availability, $availabilityReason] = AvailabilityCheck::evaluate($employee->availabilityPatterns, $start, $end);
         if ($availability === 'blocked') {
             $warnings[] = $this->warning('availability', self::WARNING, 'Kan niet: '.$availabilityReason);
         } elseif ($availability === 'fail') {
@@ -219,6 +227,7 @@ class ConflictChecker
             'warnings' => $warnings,
             'checks' => [
                 'absent' => (bool) $absence,
+                'request' => (bool) $request,
                 'overlap' => (bool) $overlap,
                 'availability' => $availability,
                 'availability_reason' => $availabilityReason,
@@ -232,62 +241,6 @@ class ConflictChecker
         ];
     }
 
-    /**
-     * Toetst de dienst aan het weekpatroon van de medewerker.
-     *
-     * - 'blocked': de dienst valt (deels) in een "kan niet"-tijdvak (bijv. school);
-     * - 'ok': de dienst valt binnen een "kan wel"-tijdvak, of er zijn alleen "kan niet"-tijdvakken en die raken de dienst niet;
-     * - 'fail': er zijn "kan wel"-tijdvakken, maar de dienst valt daar buiten;
-     * - 'none': er is geen weekpatroon ingevuld.
-     *
-     * @return array{0: string, 1: ?string} [status, omschrijving van het blokkerende tijdvak]
-     */
-    private function availability(Employee $employee, CarbonImmutable $start, CarbonImmutable $end): array
-    {
-        $patterns = $employee->availabilityPatterns;
-        if ($patterns->isEmpty()) {
-            return ['none', null];
-        }
-
-        $startDay = $start->startOfDay();
-        $nextDay = $startDay->addDay();
-        $startMin = $start->hour * 60 + $start->minute;
-        $endMin = $startMin + (int) $start->diffInMinutes($end);
-
-        // Tijdvakken als minuten vanaf middernacht van de begindag; een dienst over middernacht raakt ook de volgende dag.
-        $windows = fn (string $type) => $patterns->where('type', $type)
-            ->flatMap(function ($p) use ($startDay, $nextDay) {
-                $pStart = $this->minutes($p->start_time);
-                $pEnd = $this->minutes($p->end_time);
-                if ($pEnd <= $pStart) {
-                    $pEnd += 1440; // tot middernacht of later
-                }
-                $result = [];
-                if ($p->occursOn($startDay)) {
-                    $result[] = [$pStart, $pEnd, $p];
-                }
-                if ($p->occursOn($nextDay)) {
-                    $result[] = [$pStart + 1440, $pEnd + 1440, $p];
-                }
-
-                return $result;
-            });
-
-        $blocking = $windows('unavailable')->first(fn ($w) => $w[0] < $endMin && $w[1] > $startMin);
-        if ($blocking) {
-            $p = $blocking[2];
-
-            return ['blocked', trim(($p->note ?: 'kan niet').' ('.substr($p->start_time, 0, 5).'–'.substr($p->end_time, 0, 5).')')];
-        }
-
-        $available = $windows('available');
-        if ($patterns->where('type', 'available')->isEmpty()) {
-            return ['ok', null];
-        }
-
-        return $available->contains(fn ($w) => $w[0] <= $startMin && $w[1] >= $endMin) ? ['ok', null] : ['fail', null];
-    }
-
     private function hoursInWeek(int $employeeId, CarbonImmutable $weekStart, ?int $excludeShiftId = null): float
     {
         $weekEnd = $weekStart->addWeek();
@@ -296,13 +249,6 @@ class ConflictChecker
             ->sum(fn ($a) => $a->starts_at->diffInMinutes($a->ends_at));
 
         return round($minutes / 60, 2);
-    }
-
-    private function minutes(string $time): int
-    {
-        [$h, $m] = array_map('intval', explode(':', $time));
-
-        return $h * 60 + $m;
     }
 
     private function num(float $n): string

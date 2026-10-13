@@ -73,3 +73,5 @@ Zie [DEPLOY.md](DEPLOY.md) voor de installatie op de VPS naast getbolster.nl.
 |---|---|
 | `php artisan novon:create-planner` | Planner- of teamleideraccount aanmaken (`--role=teamleider`) |
 | `php artisan novon:generate-shifts` | Diensten aanvullen tot 12 weken vooruit (draait ook elke nacht) |
+| `php artisan novon:release-unavailable` | Eenmalig opschonen: medewerkers van toekomstige diensten buiten hun beschikbaarheid halen |
+| `php artisan novon:learn-buildings` | Wie 2 diensten op een pand heeft gedraaid, kent dat pand (draait ook elk uur; aantal via `NOVON_LEARN_BUILDING_AFTER`) |

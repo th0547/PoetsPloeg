@@ -4,9 +4,12 @@
         <a href="{{ route('absences.index') }}" class="btn-secondary">‹ Terug</a>
     </x-slot>
 
-    <form method="POST" action="{{ route('absences.store') }}" class="card card-body max-w-2xl space-y-4" x-data="{ wholeDays: {{ old('start_time') || old('end_time') ? 'false' : 'true' }} }">
+    <form method="POST" action="{{ route('absences.store') }}" class="card card-body max-w-2xl space-y-4" x-data="{ wholeDays: {{ old('start_time') || old('end_time') ? 'false' : 'true' }}, type: @js(old('type', 'ziek')) }">
         @csrf
-        <p class="text-sm text-gray-600">De medewerker wordt automatisch van alle diensten in deze periode gehaald. Daarna zie je direct welke diensten open staan en wie kan invallen.</p>
+        <p class="text-sm text-gray-600" x-show="type !== 'verzoek'">De medewerker wordt automatisch van alle diensten in deze periode gehaald. Daarna zie je direct welke diensten open staan en wie kan invallen.</p>
+        <p class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900" x-show="type === 'verzoek'" x-cloak>
+            <strong>Verlofverzoek:</strong> de medewerker blijft voorlopig ingepland. Zoek per dienst een vervanger; zodra alle diensten vervangen zijn, wordt het verlof automatisch goedgekeurd.
+        </p>
         <div class="grid gap-4 sm:grid-cols-2">
             <div>
                 <label class="label" for="employee_id">Medewerker</label>
@@ -19,7 +22,7 @@
             </div>
             <div>
                 <label class="label" for="type">Soort</label>
-                <select id="type" name="type" class="input">
+                <select id="type" name="type" class="input" x-model="type">
                     @foreach (\App\Models\Absence::TYPES as $value => $label)
                         <option value="{{ $value }}" @selected(old('type', 'ziek') === $value)>{{ $label }}</option>
                     @endforeach
@@ -49,6 +52,6 @@
                 <input id="note" name="note" class="input" value="{{ old('note') }}" placeholder="Optioneel">
             </div>
         </div>
-        <button type="submit" class="btn">Registreren en vervangers zoeken</button>
+        <button type="submit" class="btn" x-text="type === 'verzoek' ? 'Verzoek indienen' : 'Registreren en vervangers zoeken'">Registreren en vervangers zoeken</button>
     </form>
 </x-app-layout>

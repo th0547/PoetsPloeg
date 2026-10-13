@@ -7,6 +7,7 @@ use App\Models\Absence;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Shift;
+use App\Services\AbsenceService;
 use App\Services\ConflictChecker;
 use App\Services\DutchHolidays;
 use App\Services\ShiftGenerator;
@@ -94,18 +95,19 @@ class PlanningApiController extends Controller
                 }
             }
 
-            $absences = Absence::query()->with('employee:id,name')
+            $absences = Absence::query()->notRejected()->with('employee:id,name')
                 ->where('starts_at', '<', $toExclusive)->where('ends_at', '>', $from)->get();
             foreach ($absences as $absence) {
+                $label = $absence->typeLabel().($absence->isPending() ? ' (in afwachting)' : '');
                 $items[] = [
                     'id' => 'abs-'.$absence->id,
                     'group' => $absence->employee_id,
                     'start' => $absence->starts_at->toIso8601String(),
                     'end' => $absence->ends_at->toIso8601String(),
                     'type' => 'background',
-                    'className' => 'bg-absence',
-                    'content' => e($absence->typeLabel()),
-                    'title' => e($absence->employee->name.': '.$absence->typeLabel()),
+                    'className' => $absence->isPending() ? 'bg-request' : 'bg-absence',
+                    'content' => e($label),
+                    'title' => e($absence->employee->name.': '.$label),
                 ];
             }
         } else {
@@ -223,6 +225,8 @@ class PlanningApiController extends Controller
             }
         });
 
+        app(AbsenceService::class)->evaluateForShift($shift);
+
         return response()->json(['ok' => true, 'warnings' => $warnings]);
     }
 
@@ -251,16 +255,20 @@ class PlanningApiController extends Controller
                 'extendedProps' => ['shiftId' => $s->id],
             ])->all();
 
-        $absences = Absence::query()->with('employee:id,name')
+        $absences = Absence::query()->notRejected()->with('employee:id,name')
             ->where('starts_at', '<', $to)->where('ends_at', '>', $from)->get();
         foreach ($absences as $a) {
             $events[] = [
                 'id' => 'abs-'.$a->id,
-                'title' => $a->employee->name.' – '.strtolower($a->typeLabel()),
+                'title' => $a->employee->name.' – '.strtolower($a->typeLabel()).($a->isPending() ? ' (in afwachting)' : ''),
                 'start' => $a->starts_at->toDateString(),
                 'end' => $a->ends_at->addDay()->toDateString(),
                 'allDay' => true,
-                'color' => $a->type === 'ziek' ? '#dc2626' : '#6b7280',
+                'color' => match (true) {
+                    $a->isPending() => '#d97706',
+                    $a->type === 'ziek' => '#dc2626',
+                    default => '#6b7280',
+                },
                 'classNames' => ['ev-absence'],
             ];
         }

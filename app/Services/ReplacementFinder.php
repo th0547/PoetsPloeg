@@ -61,6 +61,7 @@ class ReplacementFinder
             default => 0,
         };
         $score += $checks['missing_skills'] === [] ? 30 : 0;
+        $score -= ($checks['request'] ?? false) ? 15 : 0;
         $score += $checks['knows_building'] ? 20 : 0;
         $max = $checks['contract_max'];
         $score += ($max === null || $checks['new_week_hours'] <= $max) ? 10 : 0;
@@ -88,6 +89,10 @@ class ReplacementFinder
             'blocked' => ['ok' => false, 'text' => 'Kan niet: '.$checks['availability_reason']],
             default => ['ok' => false, 'text' => 'Buiten beschikbaarheid'],
         };
+
+        if ($checks['request'] ?? false) {
+            $reasons[] = ['ok' => false, 'text' => 'Heeft zelf verlof aangevraagd'];
+        }
 
         $reasons[] = $checks['missing_skills'] === []
             ? ['ok' => true, 'text' => 'Heeft vereiste vaardigheden']

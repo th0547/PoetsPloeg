@@ -5,8 +5,9 @@ export function notifyChanged() {
     window.dispatchEvent(new CustomEvent('shifts-changed'));
 }
 
-export function openShift(id, candidates = false) {
-    window.dispatchEvent(new CustomEvent('open-shift', { detail: { id, candidates } }));
+/** Open het zijpaneel. Met replaceEmployeeId nemen vervangers de plek van die medewerker over (verlofverzoek). */
+export function openShift(id, candidates = false, replaceEmployeeId = null) {
+    window.dispatchEvent(new CustomEvent('open-shift', { detail: { id, candidates, replace: replaceEmployeeId } }));
 }
 
 /** Toon waarschuwingen en vraag bevestiging. */
@@ -36,7 +37,17 @@ export default function shiftPanel() {
         changed: false,
         form: {},
 
-        async open(id, withCandidates = false) {
+        replace: null,
+        notice: null,
+
+        /** Medewerker die vervangen wordt (verlofverzoek), als die nog op de dienst staat. */
+        replacing() {
+            return this.replace && this.shift ? this.shift.assignments.find((a) => a.employee_id === this.replace) : null;
+        },
+
+        async open(id, withCandidates = false, replace = null) {
+            this.replace = replace;
+            this.notice = null;
             this.visible = true;
             this.loading = true;
             this.shift = null;
@@ -100,8 +111,14 @@ export default function shiftPanel() {
 
         async assign(employeeId, source = 'manual', confirm = false) {
             this.error = null;
+            const replacing = this.replacing();
             try {
-                const { data } = await axios.post(`/api/shifts/${this.shift.id}/assignments`, { employee_id: employeeId, source, confirm });
+                const { data } = await axios.post(`/api/shifts/${this.shift.id}/assignments`, {
+                    employee_id: employeeId,
+                    source,
+                    confirm,
+                    replace_employee_id: replacing ? replacing.employee_id : null,
+                });
                 if (data.needs_confirmation) {
                     if (confirmWarnings(data.warnings)) {
                         return this.assign(employeeId, source, true);
@@ -109,6 +126,13 @@ export default function shiftPanel() {
                     return;
                 }
                 this.setShift(data);
+                if (replacing) {
+                    this.notice = `${replacing.name} is vervangen.`;
+                    this.replace = null;
+                }
+                if (data.approved_requests?.length) {
+                    this.notice = `Verlofverzoek van ${data.approved_requests.join(', ')} is goedgekeurd: alle diensten zijn vervangen.`;
+                }
                 this.markChanged();
                 if (this.candidates) await this.loadCandidates();
             } catch (e) {

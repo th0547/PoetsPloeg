@@ -60,6 +60,11 @@
     border: 0;
     color: #475569;
 }
+.novon-timeline .vis-item.vis-background.bg-request {
+    background: repeating-linear-gradient(45deg, rgba(251, 191, 36, 0.22), rgba(251, 191, 36, 0.22) 6px, rgba(251, 191, 36, 0.08) 6px, rgba(251, 191, 36, 0.08) 12px);
+    border: 0;
+    color: #92400e;
+}
 .novon-timeline .vis-item.vis-background.bg-holiday {
     background: rgba(253, 230, 138, 0.35);
     border: 0;

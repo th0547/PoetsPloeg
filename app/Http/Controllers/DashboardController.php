@@ -39,7 +39,7 @@ class DashboardController extends Controller
             ->filter(fn (Shift $s) => $s->assignments_count < $s->required_staff)
             ->values();
 
-        $absentToday = Absence::query()->with('employee')
+        $absentToday = Absence::query()->effective()->with('employee')
             ->where('starts_at', '<', $day->addDay())->where('ends_at', '>', $day)
             ->orderBy('ends_at')->get();
 
