@@ -57,6 +57,7 @@ class ReplacementFinder
         $score = match ($checks['availability']) {
             'ok' => 40,
             'none' => 20,
+            'blocked' => -20,
             default => 0,
         };
         $score += $checks['missing_skills'] === [] ? 30 : 0;
@@ -84,6 +85,7 @@ class ReplacementFinder
         $reasons[] = match ($checks['availability']) {
             'ok' => ['ok' => true, 'text' => 'Beschikbaar'],
             'none' => ['ok' => null, 'text' => 'Geen weekpatroon ingevuld'],
+            'blocked' => ['ok' => false, 'text' => 'Kan niet: '.$checks['availability_reason']],
             default => ['ok' => false, 'text' => 'Buiten beschikbaarheid'],
         };
 

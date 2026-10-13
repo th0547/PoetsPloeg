@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AvailabilityPattern;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Skill;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class EmployeeController extends Controller
@@ -65,8 +67,10 @@ class EmployeeController extends Controller
             'buildings' => Building::orderBy('name')->get(),
             'patterns' => old('patterns', $employee->availabilityPatterns->map(fn ($p) => [
                 'weekday' => $p->weekday,
+                'type' => $p->type,
                 'start_time' => substr($p->start_time, 0, 5),
                 'end_time' => substr($p->end_time, 0, 5),
+                'note' => $p->note,
             ])->values()->all()),
             'absences' => $employee->exists
                 ? $employee->absences()->where('ends_at', '>=', now()->subDays(30))->get()
@@ -91,6 +95,8 @@ class EmployeeController extends Controller
             'buildings.*' => ['exists:buildings,id'],
             'patterns' => ['array'],
             'patterns.*.weekday' => ['required', 'integer', 'between:1,7'],
+            'patterns.*.type' => ['required', Rule::in(array_keys(AvailabilityPattern::TYPES))],
+            'patterns.*.note' => ['nullable', 'string', 'max:100'],
             'patterns.*.start_time' => ['required', 'date_format:H:i'],
             'patterns.*.end_time' => ['required', 'date_format:H:i'],
         ], [], [

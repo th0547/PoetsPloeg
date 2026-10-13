@@ -63,14 +63,18 @@ class PagesTest extends TestCase
             'active' => '1',
             'skills' => [$skill->id],
             'buildings' => [$building->id],
-            'patterns' => [['weekday' => 1, 'start_time' => '17:00', 'end_time' => '22:00']],
+            'patterns' => [
+                ['weekday' => 1, 'type' => 'available', 'start_time' => '17:00', 'end_time' => '22:00'],
+                ['weekday' => 1, 'type' => 'unavailable', 'start_time' => '08:00', 'end_time' => '15:00', 'note' => 'School'],
+            ],
         ])->assertRedirect();
 
         $employee = Employee::firstWhere('name', 'Fatima Yilmaz');
         $this->assertTrue($employee->active);
         $this->assertSame([$skill->id], $employee->skills->pluck('id')->all());
         $this->assertSame([$building->id], $employee->buildings->pluck('id')->all());
-        $this->assertSame(1, $employee->availabilityPatterns()->count());
+        $this->assertSame(2, $employee->availabilityPatterns()->count());
+        $this->assertSame('School', $employee->availabilityPatterns()->where('type', 'unavailable')->value('note'));
     }
 
     public function test_creating_a_template_plans_shifts_with_fixed_staff(): void

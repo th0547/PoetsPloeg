@@ -46,6 +46,19 @@ class ReplacementFinderTest extends TestCase
         $this->assertTrue($result['candidates'][0]['reasons'][0]['ok']);
     }
 
+    public function test_cannot_ranks_below_unknown_and_shows_reason(): void
+    {
+        $shift = Shift::factory()->at('2026-10-12', '09:00', '11:00')->create();
+        $student = Employee::factory()->create(['name' => 'Student']);
+        $student->availabilityPatterns()->create(['weekday' => 1, 'type' => 'unavailable', 'start_time' => '08:00', 'end_time' => '15:00', 'note' => 'School']);
+        Employee::factory()->create(['name' => 'Zonder patroon']);
+
+        $result = app(ReplacementFinder::class)->candidates($shift);
+
+        $this->assertSame(['Zonder patroon', 'Student'], array_column($result['candidates'], 'name'));
+        $this->assertContains('Kan niet: School (08:00–15:00)', array_column($result['candidates'][1]['reasons'], 'text'));
+    }
+
     public function test_prefers_employee_with_fewer_hours_on_equal_score(): void
     {
         $shift = Shift::factory()->at('2026-10-14', '18:00', '20:00')->create();

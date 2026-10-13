@@ -81,6 +81,42 @@ class ConflictCheckerTest extends TestCase
         $this->assertSame([], $this->types($shift, $employee));
     }
 
+    public function test_cannot_window_blocks_even_inside_can_window(): void
+    {
+        $shift = Shift::factory()->at('2026-10-12', '14:00', '16:00')->create();
+        $employee = $this->knownEmployee($shift->building);
+        $employee->availabilityPatterns()->create(['weekday' => 1, 'type' => 'available', 'start_time' => '06:00', 'end_time' => '22:00']);
+        $employee->availabilityPatterns()->create(['weekday' => 1, 'type' => 'unavailable', 'start_time' => '08:00', 'end_time' => '15:00', 'note' => 'School']);
+
+        $result = app(ConflictChecker::class)->forCandidate($shift, $employee->id);
+
+        $this->assertSame('blocked', $result['checks']['availability']);
+        $this->assertSame('Kan niet: School (08:00–15:00)', $result['warnings'][0]['message']);
+    }
+
+    public function test_only_cannot_windows_means_available_otherwise(): void
+    {
+        $evening = Shift::factory()->at('2026-10-12', '18:00', '20:00')->create();
+        $employee = $this->knownEmployee($evening->building);
+        $employee->availabilityPatterns()->create(['weekday' => 1, 'type' => 'unavailable', 'start_time' => '08:00', 'end_time' => '15:00']);
+
+        $this->assertSame([], $this->types($evening, $employee));
+
+        $morning = Shift::factory()->at('2026-10-12', '07:00', '09:00')->create(['building_id' => $evening->building_id]);
+        $this->assertSame(['availability'], $this->types($morning, $employee));
+    }
+
+    public function test_night_shift_checks_cannot_window_on_next_day(): void
+    {
+        $shift = Shift::factory()->create([
+            'date' => '2026-10-12', 'starts_at' => '2026-10-12 22:00:00', 'ends_at' => '2026-10-13 02:00:00',
+        ]);
+        $employee = $this->knownEmployee($shift->building);
+        $employee->availabilityPatterns()->create(['weekday' => 2, 'type' => 'unavailable', 'start_time' => '00:00', 'end_time' => '06:00']);
+
+        $this->assertSame(['availability'], $this->types($shift, $employee));
+    }
+
     public function test_warns_when_contract_hours_are_exceeded(): void
     {
         $building = Building::factory()->create();

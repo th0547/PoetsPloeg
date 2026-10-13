@@ -84,29 +84,58 @@
                 </div>
             </div>
 
-            <div class="card card-body space-y-3" x-data="{ patterns: @js($patterns) }">
+            <div class="card card-body space-y-3" x-data="{
+                    patterns: @js($patterns),
+                    add(type) {
+                        this.patterns.push(type === 'unavailable'
+                            ? { weekday: 1, type, start_time: '08:00', end_time: '15:00', note: '' }
+                            : { weekday: 1, type, start_time: '17:00', end_time: '22:00', note: '' });
+                    },
+                    copyToWeekdays() {
+                        const last = this.patterns[this.patterns.length - 1];
+                        if (!last) return;
+                        [1, 2, 3, 4, 5].forEach(d => {
+                            const exists = this.patterns.some(p => p.weekday === d && p.type === last.type && p.start_time === last.start_time && p.end_time === last.end_time);
+                            if (!exists) this.patterns.push({ ...last, weekday: d });
+                        });
+                        this.patterns.sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
+                    },
+                }">
                 <div>
                     <h2 class="font-semibold text-gray-800">Beschikbaarheid (vast weekpatroon)</h2>
-                    <p class="text-xs text-gray-500">Wanneer kan deze medewerker normaal werken? Meerdere tijdvakken per dag zijn mogelijk. Leeg = geen voorkeur opgegeven.</p>
+                    <p class="text-xs text-gray-500">
+                        Leg vast wanneer deze medewerker <strong class="text-teal-700">wel</strong> kan werken en wanneer <strong class="text-red-700">niet</strong> (bijv. school van 08:00 tot 15:00).
+                        “Kan niet” gaat altijd voor. Alleen “kan niet” ingevuld? Dan geldt de rest van de week als beschikbaar. Leeg = geen voorkeur opgegeven.
+                    </p>
                 </div>
                 <template x-for="(p, i) in patterns" :key="i">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <select :name="`patterns[${i}][weekday]`" x-model.number="p.weekday" class="rounded-md border-gray-300 text-sm shadow-sm">
+                    <div class="flex flex-wrap items-center gap-2 rounded-md border-l-4 py-1 pl-2"
+                         :class="p.type === 'unavailable' ? 'border-red-400 bg-red-50/60' : 'border-teal-400 bg-teal-50/40'">
+                        <select :name="`patterns[${i}][type]`" x-model="p.type" class="rounded-md border-gray-300 text-sm font-medium shadow-sm"
+                                :class="p.type === 'unavailable' ? 'text-red-700' : 'text-teal-700'" aria-label="Kan wel of kan niet">
+                            @foreach (\App\Models\AvailabilityPattern::TYPES as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                        <select :name="`patterns[${i}][weekday]`" x-model.number="p.weekday" class="rounded-md border-gray-300 text-sm shadow-sm" aria-label="Dag">
                             @foreach ($days as $num => $day)
                                 <option value="{{ $num }}">{{ ucfirst($day) }}</option>
                             @endforeach
                         </select>
-                        <input type="time" :name="`patterns[${i}][start_time]`" x-model="p.start_time" class="rounded-md border-gray-300 text-sm shadow-sm" required>
+                        <input type="time" :name="`patterns[${i}][start_time]`" x-model="p.start_time" class="rounded-md border-gray-300 text-sm shadow-sm" required aria-label="Van">
                         <span class="text-sm text-gray-500">tot</span>
-                        <input type="time" :name="`patterns[${i}][end_time]`" x-model="p.end_time" class="rounded-md border-gray-300 text-sm shadow-sm" required>
+                        <input type="time" :name="`patterns[${i}][end_time]`" x-model="p.end_time" class="rounded-md border-gray-300 text-sm shadow-sm" required aria-label="Tot">
+                        <input type="text" :name="`patterns[${i}][note]`" x-model="p.note" maxlength="100"
+                               :placeholder="p.type === 'unavailable' ? 'Reden, bijv. school' : 'Opmerking (optioneel)'"
+                               class="w-44 rounded-md border-gray-300 text-sm shadow-sm" aria-label="Omschrijving">
                         <button type="button" class="text-sm text-red-600 hover:underline" @click="patterns.splice(i, 1)">verwijderen</button>
                     </div>
                 </template>
                 <div class="flex flex-wrap gap-2">
-                    <button type="button" class="btn-secondary btn-sm" @click="patterns.push({ weekday: 1, start_time: '17:00', end_time: '22:00' })">+ Tijdvak</button>
-                    <button type="button" class="btn-secondary btn-sm"
-                            @click="const last = patterns[patterns.length - 1] ?? { start_time: '17:00', end_time: '22:00' }; patterns = [1,2,3,4,5].map(d => ({ weekday: d, start_time: last.start_time, end_time: last.end_time }))">
-                        Ma t/m vr met dezelfde tijden
+                    <button type="button" class="btn-secondary btn-sm" @click="add('available')">+ Kan wel</button>
+                    <button type="button" class="btn-secondary btn-sm text-red-700" @click="add('unavailable')">+ Kan niet</button>
+                    <button type="button" class="btn-secondary btn-sm" x-show="patterns.length" @click="copyToWeekdays()">
+                        Laatste regel kopiëren naar ma t/m vr
                     </button>
                 </div>
             </div>

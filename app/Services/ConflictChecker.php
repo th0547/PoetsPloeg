@@ -187,8 +187,10 @@ class ConflictChecker
             ));
         }
 
-        $availability = $this->availability($employee, $start, $end);
-        if ($availability === 'fail') {
+        [$availability, $availabilityReason] = $this->availability($employee, $start, $end);
+        if ($availability === 'blocked') {
+            $warnings[] = $this->warning('availability', self::WARNING, 'Kan niet: '.$availabilityReason);
+        } elseif ($availability === 'fail') {
             $warnings[] = $this->warning('availability', self::WARNING, 'Buiten opgegeven beschikbaarheid');
         }
 
@@ -219,6 +221,7 @@ class ConflictChecker
                 'absent' => (bool) $absence,
                 'overlap' => (bool) $overlap,
                 'availability' => $availability,
+                'availability_reason' => $availabilityReason,
                 'missing_skills' => $missing,
                 'knows_building' => $knowsBuilding,
                 'week_hours' => $weekHours,
@@ -230,31 +233,57 @@ class ConflictChecker
     }
 
     /**
-     * 'ok' als de dienst binnen een tijdvak van het weekpatroon valt, 'none' als er geen patroon is, anders 'fail'.
+     * Toetst de dienst aan het weekpatroon van de medewerker.
+     *
+     * - 'blocked': de dienst valt (deels) in een "kan niet"-tijdvak (bijv. school);
+     * - 'ok': de dienst valt binnen een "kan wel"-tijdvak, of er zijn alleen "kan niet"-tijdvakken en die raken de dienst niet;
+     * - 'fail': er zijn "kan wel"-tijdvakken, maar de dienst valt daar buiten;
+     * - 'none': er is geen weekpatroon ingevuld.
+     *
+     * @return array{0: string, 1: ?string} [status, omschrijving van het blokkerende tijdvak]
      */
-    private function availability(Employee $employee, CarbonImmutable $start, CarbonImmutable $end): string
+    private function availability(Employee $employee, CarbonImmutable $start, CarbonImmutable $end): array
     {
         $patterns = $employee->availabilityPatterns;
         if ($patterns->isEmpty()) {
-            return 'none';
+            return ['none', null];
         }
 
+        $weekday = $start->dayOfWeekIso;
+        $nextWeekday = $weekday % 7 + 1;
         $startMin = $start->hour * 60 + $start->minute;
         $endMin = $startMin + (int) $start->diffInMinutes($end);
 
-        $fits = $patterns
-            ->where('weekday', $start->dayOfWeekIso)
-            ->contains(function ($p) use ($startMin, $endMin) {
+        // Tijdvakken als minuten vanaf middernacht van de begindag; een dienst over middernacht raakt ook de volgende dag.
+        $windows = fn (string $type) => $patterns->where('type', $type)
+            ->flatMap(function ($p) use ($weekday, $nextWeekday) {
                 $pStart = $this->minutes($p->start_time);
                 $pEnd = $this->minutes($p->end_time);
                 if ($pEnd <= $pStart) {
                     $pEnd += 1440; // tot middernacht of later
                 }
+                $offset = match ($p->weekday) {
+                    $weekday => 0,
+                    $nextWeekday => 1440,
+                    default => null,
+                };
 
-                return $pStart <= $startMin && $pEnd >= $endMin;
+                return $offset === null ? [] : [[$pStart + $offset, $pEnd + $offset, $p]];
             });
 
-        return $fits ? 'ok' : 'fail';
+        $blocking = $windows('unavailable')->first(fn ($w) => $w[0] < $endMin && $w[1] > $startMin);
+        if ($blocking) {
+            $p = $blocking[2];
+
+            return ['blocked', trim(($p->note ?: 'kan niet').' ('.substr($p->start_time, 0, 5).'–'.substr($p->end_time, 0, 5).')')];
+        }
+
+        $available = $windows('available');
+        if ($patterns->where('type', 'available')->isEmpty()) {
+            return ['ok', null];
+        }
+
+        return $available->contains(fn ($w) => $w[0] <= $startMin && $w[1] >= $endMin) ? ['ok', null] : ['fail', null];
     }
 
     private function hoursInWeek(int $employeeId, CarbonImmutable $weekStart, ?int $excludeShiftId = null): float

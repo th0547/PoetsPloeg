@@ -63,6 +63,12 @@ class DemoSeeder extends Seeder
             // Weekpatroon: de meesten werken 's avonds, een deel 's ochtends.
             $evening = $i % 4 !== 0;
             $days = $i % 5 === 0 ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5];
+            // Een deel van het personeel studeert: overdag school ("kan niet").
+            if ($i % 7 === 3) {
+                foreach ([1, 2, 3, 4, 5] as $d) {
+                    $e->availabilityPatterns()->create(['weekday' => $d, 'type' => 'unavailable', 'start_time' => '08:00', 'end_time' => '15:00', 'note' => 'School']);
+                }
+            }
             foreach ($days as $d) {
                 $e->availabilityPatterns()->create($evening
                     ? ['weekday' => $d, 'start_time' => '16:00', 'end_time' => '23:00']
@@ -144,7 +150,7 @@ class DemoSeeder extends Seeder
             if ($picked >= $staff) {
                 break;
             }
-            $fitsPattern = $employee->availabilityPatterns->where('weekday', $days[0])
+            $fitsPattern = $employee->availabilityPatterns->where('type', 'available')->where('weekday', $days[0])
                 ->contains(fn ($p) => $this->minutes($p->start_time) <= $s && $this->minutes($p->end_time) >= $e);
             $free = collect($this->busy[$employee->id])->doesntContain(fn ($b) => in_array($b[0], $days) && $b[1] < $e && $b[2] > $s);
             if (! $fitsPattern || ! $free || $employee->contract_hours_max < $this->hours[$employee->id] + $weekly) {
