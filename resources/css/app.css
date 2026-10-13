@@ -46,3 +46,8 @@
 .novon-calendar .fc-toolbar-title {
     text-transform: capitalize;
 }
+
+/* Beschikbaarheid: "kan niet" gearceerd rood */
+.avail-blocked {
+    background: repeating-linear-gradient(45deg, rgba(254, 202, 202, 0.95), rgba(254, 202, 202, 0.95) 5px, rgba(254, 226, 226, 0.95) 5px, rgba(254, 226, 226, 0.95) 10px);
+}

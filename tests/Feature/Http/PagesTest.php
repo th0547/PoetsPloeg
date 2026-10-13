@@ -66,6 +66,7 @@ class PagesTest extends TestCase
             'patterns' => [
                 ['weekday' => 1, 'type' => 'available', 'start_time' => '17:00', 'end_time' => '22:00'],
                 ['weekday' => 1, 'type' => 'unavailable', 'start_time' => '08:00', 'end_time' => '15:00', 'note' => 'School'],
+                ['weekday' => 1, 'type' => 'available', 'repeat' => 'd2', 'starts_on' => '2026-10-15', 'start_time' => '06:00', 'end_time' => '08:00'],
             ],
         ])->assertRedirect();
 
@@ -73,7 +74,10 @@ class PagesTest extends TestCase
         $this->assertTrue($employee->active);
         $this->assertSame([$skill->id], $employee->skills->pluck('id')->all());
         $this->assertSame([$building->id], $employee->buildings->pluck('id')->all());
-        $this->assertSame(2, $employee->availabilityPatterns()->count());
+        $this->assertSame(3, $employee->availabilityPatterns()->count());
+        $everyOtherDay = $employee->availabilityPatterns()->where('repeat_unit', 'day')->first();
+        $this->assertSame(2, $everyOtherDay->repeat_every);
+        $this->assertSame(4, $everyOtherDay->weekday); // weekdag van de startdatum (donderdag)
         $this->assertSame('School', $employee->availabilityPatterns()->where('type', 'unavailable')->value('note'));
     }
 

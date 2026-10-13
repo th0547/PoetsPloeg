@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -12,22 +13,85 @@ class AvailabilityPattern extends Model
         'unavailable' => 'Kan niet',
     ];
 
-    protected $fillable = ['employee_id', 'weekday', 'type', 'start_time', 'end_time', 'note'];
+    /** Herhalingen zoals in het formulier: sleutel => [eenheid, elke N]. */
+    public const REPEATS = [
+        'w1' => ['week', 1, 'Elke week'],
+        'w2' => ['week', 2, 'Om de week'],
+        'w3' => ['week', 3, 'Om de 3 weken'],
+        'w4' => ['week', 4, 'Om de 4 weken'],
+        'd1' => ['day', 1, 'Elke dag'],
+        'd2' => ['day', 2, 'Om de dag'],
+        'd3' => ['day', 3, 'Elke 3 dagen'],
+    ];
 
-    protected $attributes = ['type' => 'available'];
+    protected $fillable = [
+        'employee_id', 'weekday', 'type', 'repeat_unit', 'repeat_every', 'starts_on', 'start_time', 'end_time', 'note',
+    ];
+
+    protected $attributes = ['type' => 'available', 'repeat_unit' => 'week', 'repeat_every' => 1];
+
+    protected function casts(): array
+    {
+        return [
+            'weekday' => 'integer',
+            'repeat_every' => 'integer',
+            'starts_on' => 'date',
+        ];
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
 
     public function isUnavailable(): bool
     {
         return $this->type === 'unavailable';
     }
 
-    protected function casts(): array
+    /** Sleutel voor het formulier, bijv. 'w2' voor om de week. */
+    public function repeatKey(): string
     {
-        return ['weekday' => 'integer'];
+        $key = ($this->repeat_unit === 'day' ? 'd' : 'w').max(1, (int) $this->repeat_every);
+
+        return isset(self::REPEATS[$key]) ? $key : 'w1';
     }
 
-    public function employee(): BelongsTo
+    /** Geldt dit tijdvak op deze datum? */
+    public function occursOn(\DateTimeInterface $date): bool
     {
-        return $this->belongsTo(Employee::class);
+        $date = CarbonImmutable::instance($date)->startOfDay();
+        $every = max(1, (int) $this->repeat_every);
+        $anchor = $this->starts_on ? CarbonImmutable::instance($this->starts_on)->startOfDay() : null;
+
+        if ($this->repeat_unit === 'day') {
+            if ($every === 1 || ! $anchor) {
+                return true;
+            }
+
+            return self::floorMod(self::daysBetween($anchor, $date), $every) === 0;
+        }
+
+        if ($date->dayOfWeekIso !== (int) $this->weekday) {
+            return false;
+        }
+        if ($every === 1 || ! $anchor) {
+            return true;
+        }
+
+        return self::floorMod(intdiv(self::daysBetween($anchor->startOfWeek(), $date->startOfWeek()), 7), $every) === 0;
+    }
+
+    /** Aantal kalenderdagen, ongevoelig voor zomer-/wintertijd. */
+    private static function daysBetween(CarbonImmutable $a, CarbonImmutable $b): int
+    {
+        $utc = fn (CarbonImmutable $d) => CarbonImmutable::parse($d->toDateString(), 'UTC');
+
+        return (int) round($utc($a)->diffInDays($utc($b), false));
+    }
+
+    private static function floorMod(int $a, int $n): int
+    {
+        return (($a % $n) + $n) % $n;
     }
 }

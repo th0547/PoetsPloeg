@@ -6,6 +6,7 @@ use App\Models\AvailabilityPattern;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Skill;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -68,6 +69,8 @@ class EmployeeController extends Controller
             'patterns' => old('patterns', $employee->availabilityPatterns->map(fn ($p) => [
                 'weekday' => $p->weekday,
                 'type' => $p->type,
+                'repeat' => $p->repeatKey(),
+                'starts_on' => $p->starts_on?->toDateString(),
                 'start_time' => substr($p->start_time, 0, 5),
                 'end_time' => substr($p->end_time, 0, 5),
                 'note' => $p->note,
@@ -96,6 +99,8 @@ class EmployeeController extends Controller
             'patterns' => ['array'],
             'patterns.*.weekday' => ['required', 'integer', 'between:1,7'],
             'patterns.*.type' => ['required', Rule::in(array_keys(AvailabilityPattern::TYPES))],
+            'patterns.*.repeat' => ['nullable', Rule::in(array_keys(AvailabilityPattern::REPEATS))],
+            'patterns.*.starts_on' => ['nullable', 'date'],
             'patterns.*.note' => ['nullable', 'string', 'max:100'],
             'patterns.*.start_time' => ['required', 'date_format:H:i'],
             'patterns.*.end_time' => ['required', 'date_format:H:i'],
@@ -112,7 +117,19 @@ class EmployeeController extends Controller
         $employee->buildings()->sync($data['buildings'] ?? []);
         $employee->availabilityPatterns()->delete();
         foreach ($data['patterns'] ?? [] as $pattern) {
-            $employee->availabilityPatterns()->create($pattern);
+            [$unit, $every] = AvailabilityPattern::REPEATS[$pattern['repeat'] ?? 'w1'];
+            $startsOn = ($every > 1 || $unit === 'day') ? ($pattern['starts_on'] ?? today()->toDateString()) : null;
+            $employee->availabilityPatterns()->create([
+                'type' => $pattern['type'],
+                'repeat_unit' => $unit,
+                'repeat_every' => $every,
+                'starts_on' => $startsOn,
+                // Bij herhaling per dag telt de weekdag niet; we bewaren die van de startdatum (handig voor sorteren).
+                'weekday' => $unit === 'day' ? CarbonImmutable::parse($startsOn)->dayOfWeekIso : $pattern['weekday'],
+                'start_time' => $pattern['start_time'],
+                'end_time' => $pattern['end_time'],
+                'note' => $pattern['note'] ?? null,
+            ]);
         }
 
         return $employee;

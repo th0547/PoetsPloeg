@@ -249,26 +249,28 @@ class ConflictChecker
             return ['none', null];
         }
 
-        $weekday = $start->dayOfWeekIso;
-        $nextWeekday = $weekday % 7 + 1;
+        $startDay = $start->startOfDay();
+        $nextDay = $startDay->addDay();
         $startMin = $start->hour * 60 + $start->minute;
         $endMin = $startMin + (int) $start->diffInMinutes($end);
 
         // Tijdvakken als minuten vanaf middernacht van de begindag; een dienst over middernacht raakt ook de volgende dag.
         $windows = fn (string $type) => $patterns->where('type', $type)
-            ->flatMap(function ($p) use ($weekday, $nextWeekday) {
+            ->flatMap(function ($p) use ($startDay, $nextDay) {
                 $pStart = $this->minutes($p->start_time);
                 $pEnd = $this->minutes($p->end_time);
                 if ($pEnd <= $pStart) {
                     $pEnd += 1440; // tot middernacht of later
                 }
-                $offset = match ($p->weekday) {
-                    $weekday => 0,
-                    $nextWeekday => 1440,
-                    default => null,
-                };
+                $result = [];
+                if ($p->occursOn($startDay)) {
+                    $result[] = [$pStart, $pEnd, $p];
+                }
+                if ($p->occursOn($nextDay)) {
+                    $result[] = [$pStart + 1440, $pEnd + 1440, $p];
+                }
 
-                return $offset === null ? [] : [[$pStart + $offset, $pEnd + $offset, $p]];
+                return $result;
             });
 
         $blocking = $windows('unavailable')->first(fn ($w) => $w[0] < $endMin && $w[1] > $startMin);

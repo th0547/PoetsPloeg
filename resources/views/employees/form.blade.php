@@ -84,59 +84,114 @@
                 </div>
             </div>
 
-            <div class="card card-body space-y-3" x-data="{
-                    patterns: @js($patterns),
-                    add(type) {
-                        this.patterns.push(type === 'unavailable'
-                            ? { weekday: 1, type, start_time: '08:00', end_time: '15:00', note: '' }
-                            : { weekday: 1, type, start_time: '17:00', end_time: '22:00', note: '' });
-                    },
-                    copyToWeekdays() {
-                        const last = this.patterns[this.patterns.length - 1];
-                        if (!last) return;
-                        [1, 2, 3, 4, 5].forEach(d => {
-                            const exists = this.patterns.some(p => p.weekday === d && p.type === last.type && p.start_time === last.start_time && p.end_time === last.end_time);
-                            if (!exists) this.patterns.push({ ...last, weekday: d });
-                        });
-                        this.patterns.sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
-                    },
-                }">
-                <div>
-                    <h2 class="font-semibold text-gray-800">Beschikbaarheid (vast weekpatroon)</h2>
-                    <p class="text-xs text-gray-500">
-                        Leg vast wanneer deze medewerker <strong class="text-teal-700">wel</strong> kan werken en wanneer <strong class="text-red-700">niet</strong> (bijv. school van 08:00 tot 15:00).
-                        “Kan niet” gaat altijd voor. Alleen “kan niet” ingevuld? Dan geldt de rest van de week als beschikbaar. Leeg = geen voorkeur opgegeven.
-                    </p>
-                </div>
-                <template x-for="(p, i) in patterns" :key="i">
-                    <div class="flex flex-wrap items-center gap-2 rounded-md border-l-4 py-1 pl-2"
-                         :class="p.type === 'unavailable' ? 'border-red-400 bg-red-50/60' : 'border-teal-400 bg-teal-50/40'">
-                        <select :name="`patterns[${i}][type]`" x-model="p.type" class="rounded-md border-gray-300 text-sm font-medium shadow-sm"
-                                :class="p.type === 'unavailable' ? 'text-red-700' : 'text-teal-700'" aria-label="Kan wel of kan niet">
-                            @foreach (\App\Models\AvailabilityPattern::TYPES as $value => $label)
-                                <option value="{{ $value }}">{{ $label }}</option>
-                            @endforeach
-                        </select>
-                        <select :name="`patterns[${i}][weekday]`" x-model.number="p.weekday" class="rounded-md border-gray-300 text-sm shadow-sm" aria-label="Dag">
-                            @foreach ($days as $num => $day)
-                                <option value="{{ $num }}">{{ ucfirst($day) }}</option>
-                            @endforeach
-                        </select>
-                        <input type="time" :name="`patterns[${i}][start_time]`" x-model="p.start_time" class="rounded-md border-gray-300 text-sm shadow-sm" required aria-label="Van">
-                        <span class="text-sm text-gray-500">tot</span>
-                        <input type="time" :name="`patterns[${i}][end_time]`" x-model="p.end_time" class="rounded-md border-gray-300 text-sm shadow-sm" required aria-label="Tot">
-                        <input type="text" :name="`patterns[${i}][note]`" x-model="p.note" maxlength="100"
-                               :placeholder="p.type === 'unavailable' ? 'Reden, bijv. school' : 'Opmerking (optioneel)'"
-                               class="w-44 rounded-md border-gray-300 text-sm shadow-sm" aria-label="Omschrijving">
-                        <button type="button" class="text-sm text-red-600 hover:underline" @click="patterns.splice(i, 1)">verwijderen</button>
+            <div class="card card-body space-y-3" x-data="availabilityEditor(@js($patterns))">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                        <h2 class="font-semibold text-gray-800">Beschikbaarheid</h2>
+                        <p class="text-xs text-gray-500">
+                            Wanneer <strong class="text-teal-700">kan</strong> en wanneer <strong class="text-red-700">kan</strong> deze medewerker <strong class="text-red-700">niet</strong> werken (bijv. school 08:00–15:00)?
+                            “Kan niet” gaat altijd voor. Alleen “kan niet” ingevuld? Dan geldt de rest als beschikbaar.
+                        </p>
                     </div>
-                </template>
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" class="btn-secondary btn-sm" @click="add('available')">+ Kan wel</button>
-                    <button type="button" class="btn-secondary btn-sm text-red-700" @click="add('unavailable')">+ Kan niet</button>
-                    <button type="button" class="btn-secondary btn-sm" x-show="patterns.length" @click="copyToWeekdays()">
-                        Laatste regel kopiëren naar ma t/m vr
-                    </button>
+                    <div class="inline-flex rounded-md shadow-sm" role="group" aria-label="Weergave">
+                        <button type="button" @click="view = 'list'" :class="view === 'list' ? 'bg-gray-800 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'"
+                                class="rounded-l-md border border-gray-300 px-3 py-1 text-xs font-medium">Lijst</button>
+                        <button type="button" @click="view = 'week'" :class="view === 'week' ? 'bg-gray-800 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'"
+                                class="-ml-px rounded-r-md border border-gray-300 px-3 py-1 text-xs font-medium">Weekkalender</button>
+                    </div>
+                </div>
+
+                {{-- Lijst: gesorteerd op dag en tijd bij openen en na opslaan; tijdens bewerken blijven regels op hun plek.
+                     De velden worden ook in de kalenderweergave meegestuurd. --}}
+                <div x-show="view === 'list'" class="space-y-2">
+                    <p x-show="!patterns.length" class="text-sm text-gray-500">Nog niets ingevuld (geen voorkeur).</p>
+                    <template x-for="(p, i) in patterns" :key="i">
+                        <div class="flex flex-wrap items-center gap-2 rounded-md border-l-4 px-2 py-1.5"
+                             :class="p.type === 'unavailable' ? 'border-red-400 bg-red-50/60' : 'border-teal-400 bg-teal-50/40'">
+                            <select :name="`patterns[${i}][type]`" x-model="p.type" aria-label="Kan wel of kan niet"
+                                    class="rounded-md border-gray-300 py-1 text-sm font-medium shadow-sm" :class="p.type === 'unavailable' ? 'text-red-700' : 'text-teal-700'">
+                                @foreach (\App\Models\AvailabilityPattern::TYPES as $value => $label)
+                                    <option value="{{ $value }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                            <select :name="`patterns[${i}][repeat]`" x-model="p.repeat" @change="repeatChanged(p)" aria-label="Herhaling"
+                                    class="rounded-md border-gray-300 py-1 text-sm shadow-sm">
+                                @foreach (\App\Models\AvailabilityPattern::REPEATS as $value => [$unit, $every, $label])
+                                    <option value="{{ $value }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                            <select :name="`patterns[${i}][weekday]`" x-model.number="p.weekday" x-show="!isDaily(p)" aria-label="Dag"
+                                    class="rounded-md border-gray-300 py-1 text-sm shadow-sm">
+                                @foreach ($days as $num => $day)
+                                    <option value="{{ $num }}">{{ ucfirst($day) }}</option>
+                                @endforeach
+                            </select>
+                            <label x-show="needsStart(p)" class="inline-flex items-center gap-1 text-xs text-gray-600">
+                                <span x-text="isDaily(p) ? 'vanaf' : 'vanaf week van'"></span>
+                                <input type="date" :name="`patterns[${i}][starts_on]`" x-model="p.starts_on" :disabled="!needsStart(p)" aria-label="Vanaf"
+                                       class="rounded-md border-gray-300 py-1 text-sm shadow-sm">
+                            </label>
+                            <span class="inline-flex items-center gap-1">
+                                <input type="time" :name="`patterns[${i}][start_time]`" x-model="p.start_time" required aria-label="Van"
+                                       class="rounded-md border-gray-300 py-1 text-sm shadow-sm">
+                                <span class="text-sm text-gray-500">–</span>
+                                <input type="time" :name="`patterns[${i}][end_time]`" x-model="p.end_time" required aria-label="Tot"
+                                       class="rounded-md border-gray-300 py-1 text-sm shadow-sm">
+                            </span>
+                            <input type="text" :name="`patterns[${i}][note]`" x-model="p.note" maxlength="100" aria-label="Omschrijving"
+                                   :placeholder="p.type === 'unavailable' ? 'Reden, bijv. school' : 'Opmerking'"
+                                   class="min-w-0 flex-1 basis-32 rounded-md border-gray-300 py-1 text-sm shadow-sm">
+                            <button type="button" @click="remove(i)" class="rounded p-1 text-gray-400 hover:bg-white hover:text-red-600" title="Verwijderen" aria-label="Verwijderen">&times;</button>
+                        </div>
+                    </template>
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        <button type="button" class="btn-secondary btn-sm" @click="add('available')">+ Kan wel</button>
+                        <button type="button" class="btn-secondary btn-sm text-red-700" @click="add('unavailable')">+ Kan niet</button>
+                        <button type="button" class="btn-secondary btn-sm" x-show="patterns.length && !isDaily(patterns[patterns.length - 1])" @click="copyToWeekdays()">
+                            Laatste regel kopiëren naar ma t/m vr
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-500">Herhaling “om de week”, “om de 3 weken” of “om de dag” telt vanaf de gekozen startdatum.</p>
+                </div>
+
+                {{-- Weekkalender: zelfde gegevens, per week bekeken --}}
+                <div x-show="view === 'week'" x-cloak class="space-y-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="inline-flex items-center gap-1">
+                            <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(-1)" aria-label="Vorige week">‹</button>
+                            <button type="button" class="btn-secondary btn-sm" @click="thisWeek()">Deze week</button>
+                            <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(1)" aria-label="Volgende week">›</button>
+                            <span class="ms-2 text-sm font-medium text-gray-700" x-text="weekLabel()"></span>
+                        </div>
+                        <div class="flex items-center gap-3 text-xs text-gray-600">
+                            <span class="inline-flex items-center gap-1"><span class="h-3 w-3 rounded-sm bg-teal-200 ring-1 ring-teal-400"></span>kan wel</span>
+                            <span class="inline-flex items-center gap-1"><span class="avail-blocked h-3 w-3 rounded-sm ring-1 ring-red-400"></span>kan niet</span>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <div class="grid min-w-[40rem] grid-cols-[3rem_repeat(7,minmax(0,1fr))] text-xs">
+                            <div></div>
+                            <template x-for="d in days()" :key="d.toISOString()">
+                                <div class="border-b px-1 pb-1 text-center font-medium text-gray-700" x-text="dayLabel(d)"></div>
+                            </template>
+                            <div class="relative" :style="`height:${hourLabels().length * 1.75}rem`">
+                                <template x-for="(h, i) in hourLabels()" :key="h">
+                                    <div class="absolute right-1 -translate-y-1/2 text-gray-400" :style="`top:${(i / hourLabels().length) * 100}%`" x-text="String(h).padStart(2, '0') + ':00'"></div>
+                                </template>
+                            </div>
+                            <template x-for="d in days()" :key="'c' + d.toISOString()">
+                                <div class="relative border-l border-gray-100 bg-[linear-gradient(to_bottom,#f3f4f6_1px,transparent_1px)]"
+                                     :style="`background-size:100% 1.75rem;height:${hourLabels().length * 1.75}rem`">
+                                    <template x-for="(b, j) in blocks(d)" :key="j">
+                                        <div class="absolute overflow-hidden rounded px-1 py-0.5 leading-tight"
+                                             :class="b.type === 'unavailable' ? 'avail-blocked inset-x-0.5 z-10 text-red-800 ring-1 ring-red-400' : 'inset-x-1.5 bg-teal-100 text-teal-900 ring-1 ring-teal-300'"
+                                             :style="b.style" :title="(b.type === 'unavailable' ? 'Kan niet ' : 'Kan wel ') + b.label" x-text="b.label"></div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500">Wijzigen doe je in de lijst; de kalender laat zien wat er per week geldt.</p>
                 </div>
             </div>
 

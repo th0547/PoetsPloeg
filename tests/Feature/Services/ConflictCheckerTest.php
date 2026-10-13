@@ -117,6 +117,22 @@ class ConflictCheckerTest extends TestCase
         $this->assertSame(['availability'], $this->types($shift, $employee));
     }
 
+    public function test_cannot_every_other_week_only_blocks_in_its_weeks(): void
+    {
+        $building = Building::factory()->create();
+        $employee = $this->knownEmployee($building);
+        $employee->availabilityPatterns()->create([
+            'weekday' => 1, 'type' => 'unavailable', 'repeat_unit' => 'week', 'repeat_every' => 2,
+            'starts_on' => '2026-10-12', 'start_time' => '08:00', 'end_time' => '15:00',
+        ]);
+
+        $blocked = Shift::factory()->at('2026-10-26', '09:00', '11:00')->create(['building_id' => $building->id]);
+        $free = Shift::factory()->at('2026-10-19', '09:00', '11:00')->create(['building_id' => $building->id]);
+
+        $this->assertSame(['availability'], $this->types($blocked, $employee));
+        $this->assertSame([], $this->types($free, $employee));
+    }
+
     public function test_warns_when_contract_hours_are_exceeded(): void
     {
         $building = Building::factory()->create();
