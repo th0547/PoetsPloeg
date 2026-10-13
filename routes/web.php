@@ -8,6 +8,7 @@ use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeployWebhookController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\OpenShiftController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ShiftController;
@@ -26,6 +27,7 @@ Route::middleware(['auth', 'planner'])->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
     Route::get('/planning', PlanningController::class)->name('planning');
     Route::get('/kalender', CalendarController::class)->name('calendar');
+    Route::get('/open-diensten', OpenShiftController::class)->name('open-shifts');
 
     Route::get('/diensten/nieuw', [ShiftController::class, 'create'])->name('shifts.create');
     Route::post('/diensten', [ShiftController::class, 'store'])->name('shifts.store');

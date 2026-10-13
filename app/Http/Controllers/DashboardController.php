@@ -28,8 +28,9 @@ class DashboardController extends Controller
             ->get();
         $warnings = $checker->forShifts($shifts);
 
+        // Zelfde definitie als de teller "Open diensten" in het menu: nog niet afgelopen, komende 14 dagen.
         $openShifts = Shift::query()->active()
-            ->where('starts_at', '>=', now())
+            ->where('ends_at', '>', now())
             ->where('starts_at', '<', $openUntil->addDay())
             ->withCount('assignments')
             ->with('building')

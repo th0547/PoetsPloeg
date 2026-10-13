@@ -35,6 +35,12 @@ class Shift extends Model
         $query->whereNull('cancelled_at');
     }
 
+    /** Diensten met minder toegewezen medewerkers dan nodig. */
+    public function scopeUnderstaffed(Builder $query): void
+    {
+        $query->whereRaw('(select count(*) from shift_assignments where shift_assignments.shift_id = shifts.id) < shifts.required_staff');
+    }
+
     /** Diensten die (deels) binnen [from, to) vallen. */
     public function scopeOverlapping(Builder $query, $from, $to): void
     {

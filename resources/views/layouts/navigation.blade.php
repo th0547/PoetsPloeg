@@ -3,6 +3,7 @@
         ['route' => 'dashboard', 'label' => 'Vandaag', 'active' => 'dashboard'],
         ['route' => 'planning', 'label' => 'Planning', 'active' => 'planning'],
         ['route' => 'calendar', 'label' => 'Kalender', 'active' => 'calendar'],
+        ['route' => 'open-shifts', 'label' => 'Open diensten', 'active' => 'open-shifts', 'badge' => $openSlotCount ?? 0],
         ['route' => 'absences.index', 'label' => 'Afwezigheid', 'active' => 'absences.*'],
         ['route' => 'employees.index', 'label' => 'Medewerkers', 'active' => 'employees.*'],
         ['route' => 'buildings.index', 'label' => 'Panden', 'active' => 'buildings.*'],
@@ -19,21 +20,24 @@
                     </a>
                 </div>
 
-                <div class="hidden space-x-6 lg:-my-px lg:ms-10 lg:flex">
+                <div class="hidden space-x-4 lg:-my-px lg:ms-6 lg:flex xl:ms-10 xl:space-x-6">
                     @foreach ($links as $link)
                         <x-nav-link :href="route($link['route'])" :active="request()->routeIs($link['active'])">
                             {{ $link['label'] }}
+                            @if (! empty($link['badge']))
+                                <span class="ms-1.5 rounded-full bg-orange-500 px-1.5 py-0.5 text-[0.65rem] font-semibold leading-none text-white" title="Open plekken komende 14 dagen">{{ $link['badge'] }}</span>
+                            @endif
                         </x-nav-link>
                     @endforeach
                 </div>
             </div>
 
-            <div class="hidden lg:flex lg:items-center lg:ms-6 gap-3">
-                <a href="{{ route('shifts.create') }}" class="inline-flex items-center rounded-md bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700">+ Opdracht</a>
+            <div class="hidden lg:flex lg:items-center lg:ms-4 gap-2 xl:gap-3">
+                <a href="{{ route('shifts.create') }}" class="inline-flex items-center whitespace-nowrap rounded-md bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700" title="Losse opdracht inplannen"><span class="xl:hidden">+</span><span class="hidden xl:inline">+ Opdracht</span></a>
                 <x-dropdown align="right" width="48">
                     <x-slot name="trigger">
                         <button class="inline-flex items-center px-3 py-2 text-sm leading-4 font-medium rounded-md text-gray-500 bg-white hover:text-gray-700 focus:outline-none">
-                            <div>{{ Auth::user()->name }}</div>
+                            <div class="max-w-[7rem] truncate xl:max-w-[12rem]">{{ Auth::user()->name }}</div>
                             <svg class="ms-1 fill-current h-4 w-4" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
                         </button>
                     </x-slot>
@@ -63,7 +67,10 @@
     <div :class="{'block': open, 'hidden': ! open}" class="hidden lg:hidden">
         <div class="pt-2 pb-3 space-y-1">
             @foreach ($links as $link)
-                <x-responsive-nav-link :href="route($link['route'])" :active="request()->routeIs($link['active'])">{{ $link['label'] }}</x-responsive-nav-link>
+                <x-responsive-nav-link :href="route($link['route'])" :active="request()->routeIs($link['active'])">
+                    {{ $link['label'] }}
+                    @if (! empty($link['badge']))<span class="ms-1 rounded-full bg-orange-500 px-1.5 py-0.5 text-xs font-semibold text-white">{{ $link['badge'] }}</span>@endif
+                </x-responsive-nav-link>
             @endforeach
             <x-responsive-nav-link :href="route('shifts.create')">+ Losse opdracht</x-responsive-nav-link>
             <x-responsive-nav-link :href="route('skills.index')">Vaardigheden</x-responsive-nav-link>
