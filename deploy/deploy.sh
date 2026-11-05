@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Uitrollen van Novon op de VPS. Draai als gebruiker "novon":
-#   sudo -u novon /var/www/novon/deploy/deploy.sh
+# Uitrollen van PoetsPloeg op de VPS. Draai als gebruiker "poetsploeg":
+#   sudo -u poetsploeg /var/www/poetsploeg/deploy/deploy.sh
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/var/www/novon}"
+APP_DIR="${APP_DIR:-/var/www/poetsploeg}"
 BRANCH="${BRANCH:-main}"
 
 cd "$APP_DIR"
@@ -25,7 +25,7 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 
-# Opcache verversen: herlaad alleen de novon-pool (sudo-regel staat in DEPLOY.md).
+# Opcache verversen: herlaad alleen de poetsploeg-pool (sudo-regel staat in DEPLOY.md).
 sudo -n /usr/bin/systemctl reload php8.3-fpm 2>/dev/null || echo "Let op: php-fpm niet herladen (geen sudo-recht); opcache ververst vanzelf."
 
 echo "==> klaar"

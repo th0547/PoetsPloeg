@@ -1,4 +1,4 @@
-# Novon – planningstool voor schoonmaak
+# PoetsPloeg – planningstool voor schoonmaak
 
 Webapplicatie om schoonmaakdiensten voor meerdere panden te plannen, met vaste en losse taken, meerdere medewerkers en een slimme vervangerszoeker bij uitval.
 
@@ -20,12 +20,12 @@ Techniek: Laravel 12 (PHP 8.3), MySQL 8, Blade + Alpine.js + Tailwind, vis-timel
 Vereist: Docker Desktop.
 
 ```bash
-git clone git@github.com:th0547/Novon.git && cd Novon
+git clone git@github.com:th0547/PoetsPloeg.git && cd PoetsPloeg
 docker compose up -d                                   # eerste keer duurt een paar minuten
 docker compose exec app php artisan migrate --seed     # database + demodata
 ```
 
-Open <http://localhost:8080> en log in met **planner@novon.test** / **password**. De demo bevat 15 panden, 50 medewerkers, vaste taken, verlof en een zieke medewerker. Uitgaande e-mail kun je bekijken op <http://localhost:8025> (Mailpit).
+Open <http://localhost:8080> en log in met **planner@poetsploeg.test** / **password**. De demo bevat 15 panden, 50 medewerkers, vaste taken, verlof en een zieke medewerker. Uitgaande e-mail kun je bekijken op <http://localhost:8025> (Mailpit).
 
 - Opnieuw beginnen met verse demodata: `docker compose exec app php artisan migrate:fresh --seed`
 - Na wijzigingen in JS/CSS: `docker compose exec app npm run build`
@@ -34,7 +34,7 @@ Open <http://localhost:8080> en log in met **planner@novon.test** / **password**
 ### Windows (Docker Desktop)
 
 - De PHP- en JavaScript-pakketten (`vendor`, `node_modules`) staan in Docker-volumes, niet in je projectmap. Daardoor is de eerste start veel sneller.
-- Nog sneller: zet de projectmap in WSL (bijv. `\\wsl$\Ubuntu\home\<naam>\Novon`) in plaats van op `C:\`.
+- Nog sneller: zet de projectmap in WSL (bijv. `\\wsl$\Ubuntu\home\<naam>\PoetsPloeg`) in plaats van op `C:\`.
 - Bleef de eerste start eerder hangen op een time-out (`exceeded the timeout of 300 seconds`)? Haal de nieuwste versie op en begin schoon:
   ```bash
   git pull
@@ -71,7 +71,7 @@ Zie [DEPLOY.md](DEPLOY.md) voor de installatie op de VPS naast getbolster.nl.
 
 | Commando | Wat |
 |---|---|
-| `php artisan novon:create-planner` | Planner- of teamleideraccount aanmaken (`--role=teamleider`) |
-| `php artisan novon:generate-shifts` | Diensten aanvullen tot 12 weken vooruit (draait ook elke nacht) |
-| `php artisan novon:release-unavailable` | Eenmalig opschonen: medewerkers van toekomstige diensten buiten hun beschikbaarheid halen |
-| `php artisan novon:learn-buildings` | Wie 2 diensten op een pand heeft gedraaid, kent dat pand (draait ook elk uur; aantal via `NOVON_LEARN_BUILDING_AFTER`) |
+| `php artisan poetsploeg:create-planner` | Planner- of teamleideraccount aanmaken (`--role=teamleider`) |
+| `php artisan poetsploeg:generate-shifts` | Diensten aanvullen tot 12 weken vooruit (draait ook elke nacht) |
+| `php artisan poetsploeg:release-unavailable` | Eenmalig opschonen: medewerkers van toekomstige diensten buiten hun beschikbaarheid halen |
+| `php artisan poetsploeg:learn-buildings` | Wie 2 diensten op een pand heeft gedraaid, kent dat pand (draait ook elk uur; aantal via `POETSPLOEG_LEARN_BUILDING_AFTER`) |

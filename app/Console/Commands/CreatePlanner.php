@@ -9,7 +9,7 @@ use Illuminate\Validation\Rules\Password;
 
 class CreatePlanner extends Command
 {
-    protected $signature = 'novon:create-planner {--name=} {--email=} {--role=planner}';
+    protected $signature = 'poetsploeg:create-planner {--name=} {--email=} {--role=planner}';
 
     protected $description = 'Maak een planner- of teamleideraccount aan (bijv. het eerste account na installatie)';
 

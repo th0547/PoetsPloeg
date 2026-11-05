@@ -1,18 +1,18 @@
 # Alleen voor lokaal testen. Start met:  docker compose up -d
 # Daarna eenmalig:                       docker compose exec app php artisan migrate --seed
-# Open http://localhost:8080 en log in met planner@novon.test / password
+# Open http://localhost:8080 en log in met planner@poetsploeg.test / password
 services:
   app:
     build:
       context: .
       dockerfile: docker/Dockerfile
     volumes:
-      - .:/var/www/novon
+      - .:/var/www/poetsploeg
       # vendor en node_modules in Docker-volumes: veel sneller dan in de (Windows-)projectmap.
-      - vendor:/var/www/novon/vendor
-      - node_modules:/var/www/novon/node_modules
+      - vendor:/var/www/poetsploeg/vendor
+      - node_modules:/var/www/poetsploeg/node_modules
     environment:
-      NOVON_ROLE: app
+      POETSPLOEG_ROLE: app
       COMPOSER_PROCESS_TIMEOUT: 1800
     depends_on:
       db:
@@ -23,7 +23,7 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - .:/var/www/novon:ro
+      - .:/var/www/poetsploeg:ro
       - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - app
@@ -33,10 +33,10 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     volumes:
-      - .:/var/www/novon
-      - vendor:/var/www/novon/vendor
+      - .:/var/www/poetsploeg
+      - vendor:/var/www/poetsploeg/vendor
     environment:
-      NOVON_ROLE: scheduler
+      POETSPLOEG_ROLE: scheduler
     command: ["php", "artisan", "schedule:work"]
     depends_on:
       - app
@@ -44,9 +44,9 @@ services:
   db:
     image: mysql:8.0
     environment:
-      MYSQL_DATABASE: novon
-      MYSQL_USER: novon
-      MYSQL_PASSWORD: novon
+      MYSQL_DATABASE: poetsploeg
+      MYSQL_USER: poetsploeg
+      MYSQL_PASSWORD: poetsploeg
       MYSQL_ROOT_PASSWORD: root
     volumes:
       - dbdata:/var/lib/mysql

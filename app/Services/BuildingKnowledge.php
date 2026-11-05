@@ -15,7 +15,7 @@ class BuildingKnowledge
      */
     public function learn(?int $employeeId = null): int
     {
-        $threshold = max(1, (int) config('novon.learn_building_after_shifts'));
+        $threshold = max(1, (int) config('poetsploeg.learn_building_after_shifts'));
 
         $pairs = DB::table('shift_assignments')
             ->join('shifts', 'shifts.id', '=', 'shift_assignments.shift_id')

@@ -1,15 +1,15 @@
 /* Gantt-weergave (vis-timeline) */
-.novon-timeline .vis-timeline {
+.poetsploeg-timeline .vis-timeline {
     border: 0;
     font-family: inherit;
     font-size: 0.8rem;
 }
-.novon-timeline .vis-labelset .vis-label .vis-inner {
+.poetsploeg-timeline .vis-labelset .vis-label .vis-inner {
     padding: 6px 10px;
     min-width: 180px;
 }
-.novon-timeline .vis-label.group-open,
-.novon-timeline .vis-foreground .vis-group.group-open {
+.poetsploeg-timeline .vis-label.group-open,
+.poetsploeg-timeline .vis-foreground .vis-group.group-open {
     background: #fffbeb;
 }
 .group-dot {
@@ -20,52 +20,52 @@
     margin-right: 0.4rem;
     vertical-align: middle;
 }
-.novon-timeline .vis-item {
+.poetsploeg-timeline .vis-item {
     background: #f0fdfa;
     border-color: #99f6e4;
     color: #134e4a;
     border-radius: 4px;
     font-size: 0.75rem;
 }
-.novon-timeline .vis-item .vis-item-content {
+.poetsploeg-timeline .vis-item .vis-item-content {
     padding: 2px 6px;
 }
-.novon-timeline .vis-item.vis-selected {
+.poetsploeg-timeline .vis-item.vis-selected {
     background: #ccfbf1;
     border-color: #0d9488;
 }
-.novon-timeline .vis-item.lvl-info {
+.poetsploeg-timeline .vis-item.lvl-info {
     background: #f8fafc;
     border-color: #cbd5e1;
     color: #334155;
 }
-.novon-timeline .vis-item.lvl-warning {
+.poetsploeg-timeline .vis-item.lvl-warning {
     background: #fffbeb;
     border-color: #f59e0b;
     color: #78350f;
 }
-.novon-timeline .vis-item.lvl-danger {
+.poetsploeg-timeline .vis-item.lvl-danger {
     background: #fef2f2;
     border-color: #ef4444;
     color: #7f1d1d;
 }
-.novon-timeline .vis-item.item-open,
-.novon-timeline .vis-item.item-has-open {
+.poetsploeg-timeline .vis-item.item-open,
+.poetsploeg-timeline .vis-item.item-has-open {
     background: #fff7ed;
     border: 1px dashed #f97316;
     color: #7c2d12;
 }
-.novon-timeline .vis-item.vis-background.bg-absence {
+.poetsploeg-timeline .vis-item.vis-background.bg-absence {
     background: repeating-linear-gradient(45deg, rgba(148, 163, 184, 0.25), rgba(148, 163, 184, 0.25) 6px, rgba(148, 163, 184, 0.1) 6px, rgba(148, 163, 184, 0.1) 12px);
     border: 0;
     color: #475569;
 }
-.novon-timeline .vis-item.vis-background.bg-request {
+.poetsploeg-timeline .vis-item.vis-background.bg-request {
     background: repeating-linear-gradient(45deg, rgba(251, 191, 36, 0.22), rgba(251, 191, 36, 0.22) 6px, rgba(251, 191, 36, 0.08) 6px, rgba(251, 191, 36, 0.08) 12px);
     border: 0;
     color: #92400e;
 }
-.novon-timeline .vis-item.vis-background.bg-holiday {
+.poetsploeg-timeline .vis-item.vis-background.bg-holiday {
     background: rgba(253, 230, 138, 0.35);
     border: 0;
     color: #92400e;
@@ -95,18 +95,18 @@
 .legend-absence { background: rgba(148, 163, 184, 0.35); border-color: transparent; }
 
 /* Week/maand: dagblokken, niet in lengte aan te passen */
-.novon-timeline.mode-slot .vis-item .vis-drag-left,
-.novon-timeline.mode-slot .vis-item .vis-drag-right {
+.poetsploeg-timeline.mode-slot .vis-item .vis-drag-left,
+.poetsploeg-timeline.mode-slot .vis-item .vis-drag-right {
     display: none;
 }
-.novon-timeline.mode-slot .vis-item.vis-range {
+.poetsploeg-timeline.mode-slot .vis-item.vis-range {
     margin-left: 2px;
 }
-.novon-timeline.mode-month .vis-item .vis-item-content {
+.poetsploeg-timeline.mode-month .vis-item .vis-item-content {
     padding: 1px 3px;
     font-size: 0.7rem;
 }
-.novon-timeline .vis-labelset .vis-label .vis-inner {
+.poetsploeg-timeline .vis-labelset .vis-label .vis-inner {
     max-width: 260px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -115,7 +115,7 @@
 
 /* Smalle schermen: smallere namenkolom; de tijd scrolt binnen de planning zelf (zie planning.js). */
 @media (max-width: 1023px) {
-    .novon-timeline .vis-labelset .vis-label .vis-inner {
+    .poetsploeg-timeline .vis-labelset .vis-label .vis-inner {
         min-width: 0;
         max-width: 130px;
         padding: 4px 6px;

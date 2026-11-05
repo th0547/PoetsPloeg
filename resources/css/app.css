@@ -26,24 +26,24 @@
 
 /* Maandkalender: op smalle schermen een minimale breedte, de omhullende div scrolt horizontaal. */
 @media (max-width: 767px) {
-    .novon-calendar {
+    .poetsploeg-calendar {
         min-width: 720px;
     }
 }
 /* Maandkalender */
-.novon-calendar .fc-event.ev-open {
+.poetsploeg-calendar .fc-event.ev-open {
     border-style: dashed !important;
     border-width: 2px !important;
     border-color: #f97316 !important;
 }
-.novon-calendar .fc-event.ev-absence {
+.poetsploeg-calendar .fc-event.ev-absence {
     opacity: 0.85;
 }
-.novon-calendar .fc-event {
+.poetsploeg-calendar .fc-event {
     cursor: pointer;
     font-size: 0.72rem;
 }
-.novon-calendar .fc-toolbar-title {
+.poetsploeg-calendar .fc-toolbar-title {
     text-transform: capitalize;
 }
 

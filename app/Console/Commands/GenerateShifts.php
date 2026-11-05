@@ -7,7 +7,7 @@ use Illuminate\Console\Command;
 
 class GenerateShifts extends Command
 {
-    protected $signature = 'novon:generate-shifts';
+    protected $signature = 'poetsploeg:generate-shifts';
 
     protected $description = 'Maak diensten uit de vaste taken aan voor de komende weken';
 

@@ -1,6 +1,6 @@
 @php
-    $days = config('novon.weekdays');
-    $short = config('novon.weekdays_short');
+    $days = config('poetsploeg.weekdays');
+    $short = config('poetsploeg.weekdays_short');
     $selectedSkills = collect(old('skills', $template->skills->pluck('id')))->map(fn ($i) => (int) $i)->all();
     $selectedEmployees = collect(old('employees', $template->employees->pluck('id')))->map(fn ($i) => (int) $i)->all();
     $sortedEmployees = $employees->sortBy(fn ($e) => [in_array($e->id, $knownIds) ? 0 : 1, $e->name]);

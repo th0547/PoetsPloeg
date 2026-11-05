@@ -64,14 +64,14 @@ class TaskTemplate extends Model
     /** Leesbare omschrijving van de herhaling, bijv. "Elke 2 weken op ma, wo". */
     public function recurrenceLabel(): string
     {
-        $days = config('novon.weekdays_short');
+        $days = config('poetsploeg.weekdays_short');
         $every = max(1, (int) $this->repeat_every);
 
         return match ($this->recurrence) {
             'weekly' => ($every === 1 ? 'Elke week' : "Elke {$every} weken").' op '
                 .collect($this->weekdays ?? [])->sort()->map(fn ($d) => $days[$d] ?? $d)->implode(', '),
             'monthly_nth_weekday' => ($every === 1 ? 'Elke maand' : "Elke {$every} maanden").' op de '
-                .($this->nth === -1 ? 'laatste' : $this->nth.'e').' '.(config('novon.weekdays')[$this->weekday] ?? ''),
+                .($this->nth === -1 ? 'laatste' : $this->nth.'e').' '.(config('poetsploeg.weekdays')[$this->weekday] ?? ''),
             'monthly_day' => ($every === 1 ? 'Elke maand' : "Elke {$every} maanden").' op dag '.$this->day_of_month,
             default => $this->recurrence,
         };

@@ -1,0 +1,12 @@
+# /etc/systemd/system/poetsploeg-deploy.path
+# Start poetsploeg-deploy.service zodra het triggerbestand verschijnt
+# (bijv. aangemaakt door een webhook, of handmatig: touch /var/www/poetsploeg/storage/app/deploy.trigger).
+[Unit]
+Description=PoetsPloeg deploy trigger
+
+[Path]
+PathExists=/var/www/poetsploeg/storage/app/deploy.trigger
+Unit=poetsploeg-deploy.service
+
+[Install]
+WantedBy=multi-user.target

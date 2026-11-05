@@ -88,7 +88,7 @@ class ShiftGenerator
     {
         $today = CarbonImmutable::today();
 
-        return $this->generate($today, $today->addWeeks(config('novon.generate_weeks_ahead')), $templates);
+        return $this->generate($today, $today->addWeeks(config('poetsploeg.generate_weeks_ahead')), $templates);
     }
 
     /**

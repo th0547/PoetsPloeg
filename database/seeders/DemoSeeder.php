@@ -29,10 +29,10 @@ class DemoSeeder extends Seeder
         fake()->seed(42);
         mt_srand(42);
 
-        User::firstOrCreate(['email' => 'planner@novon.test'], [
+        User::firstOrCreate(['email' => 'planner@poetsploeg.test'], [
             'name' => 'Demo Planner', 'password' => 'password', 'role' => 'planner',
         ]);
-        User::firstOrCreate(['email' => 'teamleider@novon.test'], [
+        User::firstOrCreate(['email' => 'teamleider@poetsploeg.test'], [
             'name' => 'Demo Teamleider', 'password' => 'password', 'role' => 'teamleider',
         ]);
 

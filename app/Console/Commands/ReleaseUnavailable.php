@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 class ReleaseUnavailable extends Command
 {
-    protected $signature = 'novon:release-unavailable';
+    protected $signature = 'poetsploeg:release-unavailable';
 
     protected $description = 'Haal medewerkers van toekomstige diensten die buiten hun beschikbaarheid vallen (eenmalig opschonen)';
 
