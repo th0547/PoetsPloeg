@@ -14,7 +14,7 @@ class DeployWebhookTest extends TestCase
         parent::setUp();
         $this->trigger = storage_path('app/deploy.trigger');
         File::delete($this->trigger);
-        config(['novon.deploy_webhook_secret' => 'geheim', 'novon.deploy_branch' => 'main']);
+        config(['poetsploeg.deploy_webhook_secret' => 'geheim', 'poetsploeg.deploy_branch' => 'main']);
     }
 
     protected function tearDown(): void
@@ -54,7 +54,7 @@ class DeployWebhookTest extends TestCase
 
     public function test_disabled_without_secret(): void
     {
-        config(['novon.deploy_webhook_secret' => null]);
+        config(['poetsploeg.deploy_webhook_secret' => null]);
         $this->send(['ref' => 'refs/heads/main'])->assertNotFound();
     }
 }

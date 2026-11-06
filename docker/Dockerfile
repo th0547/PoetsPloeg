@@ -14,10 +14,10 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && node --version && npm --version
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-COPY docker/php.ini /usr/local/etc/php/conf.d/novon.ini
-COPY docker/entrypoint.sh /usr/local/bin/novon-entrypoint
-RUN chmod +x /usr/local/bin/novon-entrypoint
+COPY docker/php.ini /usr/local/etc/php/conf.d/poetsploeg.ini
+COPY docker/entrypoint.sh /usr/local/bin/poetsploeg-entrypoint
+RUN chmod +x /usr/local/bin/poetsploeg-entrypoint
 
-WORKDIR /var/www/novon
-ENTRYPOINT ["novon-entrypoint"]
+WORKDIR /var/www/poetsploeg
+ENTRYPOINT ["poetsploeg-entrypoint"]
 CMD ["php-fpm"]

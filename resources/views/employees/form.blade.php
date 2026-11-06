@@ -1,4 +1,4 @@
-@php($days = config('novon.weekdays'))
+@php($days = config('poetsploeg.weekdays'))
 <x-app-layout :title="$employee->exists ? $employee->name : 'Nieuwe medewerker'">
     <x-slot name="header">
         <h1 class="page-title">{{ $employee->exists ? $employee->name : 'Nieuwe medewerker' }}</h1>

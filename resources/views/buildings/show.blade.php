@@ -18,7 +18,7 @@
                 <div class="flex items-center justify-between border-b px-4 py-3">
                     <div>
                         <h2 class="font-semibold text-gray-800">Vaste taken</h2>
-                        <p class="text-xs text-gray-500">Uit deze taken worden de diensten automatisch ingepland ({{ config('novon.generate_weeks_ahead') }} weken vooruit).</p>
+                        <p class="text-xs text-gray-500">Uit deze taken worden de diensten automatisch ingepland ({{ config('poetsploeg.generate_weeks_ahead') }} weken vooruit).</p>
                     </div>
                     <a href="{{ route('buildings.templates.create', $building) }}" class="btn btn-sm">+ Taak</a>
                 </div>

@@ -16,7 +16,7 @@
                 <div class="shrink-0 flex items-center">
                     <a href="{{ route('dashboard') }}" class="flex items-center gap-2">
                         <x-application-logo class="block h-8 w-auto" />
-                        <span class="font-semibold text-gray-800 tracking-tight">Novon</span>
+                        <span class="font-semibold text-gray-800 tracking-tight">PoetsPloeg</span>
                     </a>
                 </div>
 

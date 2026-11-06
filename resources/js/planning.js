@@ -27,8 +27,8 @@ const fmt = (d, opts) => new Intl.DateTimeFormat('nl-NL', opts).format(d);
 
 function store(key, value) {
     try {
-        if (value === undefined) return localStorage.getItem('novon.' + key);
-        localStorage.setItem('novon.' + key, value);
+        if (value === undefined) return localStorage.getItem('poetsploeg.' + key);
+        localStorage.setItem('poetsploeg.' + key, value);
     } catch (e) {
         return null;
     }

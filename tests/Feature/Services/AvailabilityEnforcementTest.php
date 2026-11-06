@@ -66,7 +66,7 @@ class AvailabilityEnforcementTest extends TestCase
         $shift = Shift::factory()->at('2026-10-14', '09:00', '11:00')->create();
         $shift->assignments()->create(['employee_id' => $employee->id]);
 
-        $this->artisan('novon:release-unavailable')->expectsOutputToContain('1 toewijzing(en) verwijderd')->assertSuccessful();
+        $this->artisan('poetsploeg:release-unavailable')->expectsOutputToContain('1 toewijzing(en) verwijderd')->assertSuccessful();
         $this->assertSame(0, $shift->assignments()->count());
     }
 }

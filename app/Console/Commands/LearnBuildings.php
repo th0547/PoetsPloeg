@@ -7,7 +7,7 @@ use Illuminate\Console\Command;
 
 class LearnBuildings extends Command
 {
-    protected $signature = 'novon:learn-buildings';
+    protected $signature = 'poetsploeg:learn-buildings';
 
     protected $description = 'Markeer medewerkers als ingewerkt op panden waar ze al een aantal diensten hebben gedraaid';
 
