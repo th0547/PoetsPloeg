@@ -17,7 +17,7 @@ class BuildingFactory extends Factory
             'address' => fake()->streetAddress(),
             'postal_code' => fake()->postcode(),
             'city' => fake()->city(),
-            'contact_name' => fake()->name(),
+            'contact_name' => fake()->firstName().' '.fake()->lastName(),
             'contact_phone' => fake()->phoneNumber(),
             'color' => fake()->hexColor(),
             'active' => true,
