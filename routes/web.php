@@ -6,8 +6,8 @@ use App\Http\Controllers\Api\ShiftApiController;
 use App\Http\Controllers\BuildingController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\DeployWebhookController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\HealthController;
 use App\Http\Controllers\OpenShiftController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProfileController;
@@ -15,13 +15,12 @@ use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SkillController;
 use App\Http\Controllers\TaskTemplateController;
 use App\Http\Controllers\UserController;
-use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/deploy/webhook', DeployWebhookController::class)
-    ->withoutMiddleware([VerifyCsrfToken::class])
-    ->middleware('throttle:10,1')
-    ->name('deploy.webhook');
+// Health-check voor de uitrol: geeft de commit terug die echt draait (uit de image, zie
+// docker/productie/Dockerfile) en controleert de database. De uitrol-workflow is pas groen
+// als deze commit gelijk is aan de commit die uitgerold werd.
+Route::get('/gezond', HealthController::class)->name('health');
 
 Route::middleware(['auth', 'planner'])->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');

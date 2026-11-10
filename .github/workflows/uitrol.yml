@@ -1,0 +1,57 @@
+name: Uitrol
+
+# Bij elke merge naar main, of met de hand (bijv. na een mislukte uitrol).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Nooit twee uitrollen tegelijk; een lopende uitrol niet afbreken.
+concurrency:
+  group: uitrol-productie
+  cancel-in-progress: false
+
+env:
+  URL: https://poetsploeg.thomasklaassen.nl
+
+jobs:
+  uitrol:
+    name: Uitrollen naar productie
+    runs-on: ubuntu-latest
+    environment:
+      name: productie
+      url: https://poetsploeg.thomasklaassen.nl
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/ssh-klaarzetten
+        with:
+          sleutel: ${{ secrets.UITROL_SLEUTEL }}
+          hostsleutel: ${{ secrets.UITROL_HOSTSLEUTEL }}
+          host: ${{ secrets.UITROL_HOST }}
+          gebruiker: ${{ secrets.UITROL_GEBRUIKER }}
+
+      # Precies deze commit gaat als tar naar de server; daar draait het uitrolscript uit
+      # dezelfde commit (zie infra/server/poetsploeg-ontvang).
+      - name: Uitrollen
+        run: git archive --format=tar "$GITHUB_SHA" | ssh poetsploeg "uitrol $GITHUB_SHA"
+
+      # "Groen" moet betekenen dat de juiste versie draait, niet alleen dat er iets draait.
+      - name: Health-check van buitenaf
+        run: |
+          for _ in $(seq 1 20); do
+            if antwoord=$(curl -fsS --max-time 10 "$URL/gezond"); then
+              echo "$antwoord"
+              if [ "$(jq -r .commit <<<"$antwoord")" = "$GITHUB_SHA" ]; then
+                echo "Draait: $GITHUB_SHA"
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo "::error::$URL/gezond geeft niet commit $GITHUB_SHA terug"
+          exit 1

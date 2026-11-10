@@ -7,9 +7,8 @@ return [
     // Na zoveel gedraaide diensten op een pand geldt een medewerker als ingewerkt op dat pand.
     'learn_building_after_shifts' => (int) env('POETSPLOEG_LEARN_BUILDING_AFTER', 2),
 
-    // GitHub-webhook voor automatisch uitrollen (leeg = uitgeschakeld). Zie DEPLOY.md.
-    'deploy_webhook_secret' => env('DEPLOY_WEBHOOK_SECRET'),
-    'deploy_branch' => env('DEPLOY_BRANCH', 'main'),
+    // Commit die in de image is gebakken (docker/productie/Dockerfile); getoond op /gezond.
+    'commit' => env('POETSPLOEG_COMMIT', 'onbekend'),
 
     'weekdays' => [
         1 => 'maandag', 2 => 'dinsdag', 3 => 'woensdag', 4 => 'donderdag',

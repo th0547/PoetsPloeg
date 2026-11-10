@@ -1,4 +1,17 @@
+# Geldt voor de productie-image (docker/productie/Dockerfile, context = de release).
+.git
+.github
+.env
+.env.*
+!.env.example
 node_modules
 vendor
-.git
-storage/logs
+public/build
+public/hot
+public/storage
+bootstrap/cache/*.php
+storage/logs/*
+storage/framework/*/*
+storage/app/*
+database/database.sqlite
+*.log

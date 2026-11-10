@@ -1,0 +1,47 @@
+# Caddy voor PoetsPloeg. Regelt Let's Encrypt zelf; voorwaarde is dat de DNS al naar de
+# server wijst.
+#
+# Les uit het vorige project: een lege variabele (zoals `email {$X}`) laat Caddy het hele
+# bestand weigeren, en dan herstart de container eindeloos. Daarom staat hier maar één
+# variabele, en controleert scripts/server/uitrol.sh vooraf dat die gevuld is.
+{
+    # HTTP/3 uit: Docker publiceert 443 alleen als TCP. Met HTTP/3 aan bood Caddy het
+    # via Alt-Svc aan, en Safari op iOS liep vast op de dichte UDP-poort (curl merkte niets).
+    servers {
+        protocols h1 h2
+    }
+}
+
+{$POETSPLOEG_DOMEIN} {
+    root * /var/www/poetsploeg/public
+    encode zstd gzip
+
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Strict-Transport-Security "max-age=31536000"
+        -Server
+    }
+
+    # Gebouwde assets hebben een hash in de naam: lang cachen mag.
+    @build path /build/*
+    header @build Cache-Control "public, max-age=31536000, immutable"
+
+    # Verborgen bestanden nooit uitleveren (behalve .well-known). Caddy kent geen
+    # lookahead in regexen, vandaar de losse 'not'.
+    @verborgen {
+        path_regexp /\.
+        not path /.well-known/*
+    }
+    respond @verborgen 404
+
+    php_fastcgi app:9000
+    file_server
+
+    log {
+        output stdout
+        format console
+    }
+}

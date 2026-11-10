@@ -65,7 +65,7 @@ php artisan test
 
 ## Op de server zetten
 
-Zie [DEPLOY.md](DEPLOY.md) voor de installatie op de VPS naast getbolster.nl.
+Zie [docs/uitrol.md](docs/uitrol.md): Docker op de Hetzner-server, uitrol via GitHub Actions bij een merge naar `main`.
 
 ## Handige commando's
 
