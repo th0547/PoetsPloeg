@@ -25,9 +25,9 @@ env_waarde() {
 }
 
 # Haalt /gezond op via Caddy op deze machine (los van DNS, wel met het echte certificaat).
-# Met een commit als argument zegt het antwoord ook of die draait ("versie":"juist").
+# Geef een commit mee ("" voor geen): dan zegt het antwoord ook of die draait ("versie":"juist").
 gezond() {
-    local domein
+    local domein commit="$1"
     domein=$(env_waarde POETSPLOEG_DOMEIN)
-    curl -fsS --max-time 5 --resolve "$domein:443:127.0.0.1" "https://$domein/gezond${1:+?commit=$1}"
+    curl -fsS --max-time 5 --resolve "$domein:443:127.0.0.1" "https://$domein/gezond${commit:+?commit=$commit}"
 }

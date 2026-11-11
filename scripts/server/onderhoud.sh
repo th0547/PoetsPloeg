@@ -14,7 +14,7 @@ source "$RELEASE/scripts/server/gemeen.sh"
 case "$TAAK" in
     status)
         log "containers"; dc ps
-        log "gezond"; gezond || echo "(geen antwoord)"; echo
+        log "gezond"; gezond "" || echo "(geen antwoord)"; echo
         # /gezond noemt de commit niet meer; hier lezen we hem binnen de server uit de container.
         log "draaiende commit"; dc exec -T app printenv POETSPLOEG_COMMIT || echo "(onbekend)"
         log "schijf"; df -h /
