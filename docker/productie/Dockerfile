@@ -19,7 +19,7 @@ RUN chmod -R u=rwX,go=rX . \
     && rm -rf .env tests node_modules
 
 # --- assets: Vite-build (Tailwind leest ook de pagination-views uit vendor) ------------------
-FROM node:22-bookworm-slim AS assets
+FROM node:26-bookworm-slim AS assets
 WORKDIR /bron
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
