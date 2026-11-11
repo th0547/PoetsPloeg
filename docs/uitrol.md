@@ -1,13 +1,13 @@
 # Uitrol en server
 
 PoetsPloeg draait op een eigen Hetzner-server met Docker. Elke merge naar `main` wordt
-automatisch uitgerold via GitHub Actions. De workflow is pas groen als
-`https://poetsploeg.thomasklaassen.nl/gezond` precies de uitgerolde commit teruggeeft.
+automatisch uitgerold via GitHub Actions. De workflow is pas groen als `/gezond` precies de
+uitgerolde commit teruggeeft.
 
 | | |
 |---|---|
 | Server | Hetzner Cloud, `178.104.225.130` / `2a01:4f8:c0c:c820::1`, Ubuntu 26.04, hostnaam `poetsploeg` |
-| Domein | `poetsploeg.thomasklaassen.nl` (A + AAAA naar de server; reverse DNS in Hetzner ook) |
+| Domein | voorlopig `e-rp.nl` (het oude ERP-domein, wijst al naar de server); later een eigen domein. Zie *Domein wisselen* |
 | Inloggen | `ssh thomas@178.104.225.130` (alleen sleutel; root kan niet via SSH) |
 | Noodingang | Hetzner-webconsole → *Reset root password* |
 | Map | `/opt/poetsploeg` (eigenaar `uitrol`) |
@@ -97,6 +97,12 @@ Environment **`productie`**, alleen te gebruiken vanaf `main`. Secrets:
 | `UITROL_HOSTSLEUTEL` | `178.104.225.130 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMktcSsbg2JvZL/3eXzW/zjrXFGLsMxs+Vg6V9XxPj7` (vingerafdruk `SHA256:7clVMsa0tyJhum8vbsCq24oEBtNsbvgFzlLTS/5rylE`, gecontroleerd op de server én vanaf de pc) |
 | `UITROL_SLEUTEL` | privésleutel `poetsploeg_uitrol` |
 
+Variabele (geen secret) in dezelfde environment:
+
+| Variabele | Inhoud |
+|---|---|
+| `UITROL_URL` | `https://e-rp.nl` — waar de health-check van buitenaf naartoe gaat |
+
 Workflows:
 
 | Workflow | Wanneer |
@@ -125,6 +131,14 @@ docker exec -it poetsploeg-app-1 php artisan poetsploeg:create-planner
 ```
 
 Gebruik op productie **nooit** `--seed`: dat zet demodata en demo-accounts in de database.
+
+## Domein wisselen
+
+1. DNS: A- en AAAA-record van het nieuwe domein naar `178.104.225.130` / `2a01:4f8:c0c:c820::1`.
+2. Server (SSH-sessie): `APP_URL` en `POETSPLOEG_DOMEIN` in `/opt/poetsploeg/.env` aanpassen.
+3. GitHub: variabele `UITROL_URL` in environment `productie` aanpassen.
+4. Actions → *Uitrol* → *Run workflow*. Caddy haalt dan zelf een nieuw certificaat.
+5. Reverse DNS in Hetzner (*Networking*) naar het nieuwe domein.
 
 ## Problemen
 
