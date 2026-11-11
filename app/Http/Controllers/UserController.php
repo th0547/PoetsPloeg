@@ -13,7 +13,10 @@ class UserController extends Controller
 {
     public function index(): View
     {
-        return view('users.index', ['users' => User::orderBy('name')->get()]);
+        return view('users.index', [
+            'users' => User::whereIn('role', User::STAFF_ROLES)->orderBy('name')->get(),
+            'employeeAccounts' => User::where('role', 'medewerker')->count(),
+        ]);
     }
 
     public function create(): View
@@ -29,13 +32,16 @@ class UserController extends Controller
         return redirect()->route('users.index')->with('status', 'Gebruiker aangemaakt.');
     }
 
-    public function edit(User $user): View
+    public function edit(User $user): View|RedirectResponse
     {
-        return view('users.form', ['user' => $user]);
+        return $this->employeeAccountRedirect($user) ?? view('users.form', ['user' => $user]);
     }
 
     public function update(Request $request, User $user): RedirectResponse
     {
+        if ($redirect = $this->employeeAccountRedirect($user)) {
+            return $redirect;
+        }
         $data = $this->validated($request, $user);
         if (empty($data['password'])) {
             unset($data['password']);
@@ -53,9 +59,24 @@ class UserController extends Controller
         if ($user->is($request->user())) {
             return back()->withErrors(['user' => 'Je kunt jezelf niet verwijderen.']);
         }
+        if ($redirect = $this->employeeAccountRedirect($user)) {
+            return $redirect;
+        }
         $user->delete();
 
         return redirect()->route('users.index')->with('status', 'Gebruiker verwijderd.');
+    }
+
+    /** Medewerker-accounts horen bij een medewerker en worden daar beheerd (uitnodigen, intrekken). */
+    private function employeeAccountRedirect(User $user): ?RedirectResponse
+    {
+        if (! $user->isEmployee()) {
+            return null;
+        }
+
+        return $user->employee
+            ? redirect()->route('employees.edit', $user->employee)->with('status', 'Een medewerker-account beheer je bij de medewerker, onder "Inloggen".')
+            : redirect()->route('users.index');
     }
 
     private function validated(Request $request, ?User $user = null): array
@@ -63,7 +84,7 @@ class UserController extends Controller
         return $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user)],
-            'role' => ['required', Rule::in(array_keys(User::ROLES))],
+            'role' => ['required', Rule::in(User::STAFF_ROLES)],
             'password' => [$user ? 'nullable' : 'required', 'confirmed', Password::defaults()],
         ]);
     }

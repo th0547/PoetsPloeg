@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Models\Absence;
 use App\Models\Shift;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Verwerkt verlof, uitval en verlofverzoeken.
@@ -131,5 +133,44 @@ class AbsenceService
     public function reject(Absence $absence): void
     {
         $absence->update(['status' => 'rejected', 'decided_at' => now()]);
+    }
+
+    /**
+     * Zet de gekozen dagen om in aaneengesloten periodes: dagen die op elkaar aansluiten
+     * (tot 23:59 en de volgende dag vanaf 00:00) worden één afwezigheid.
+     *
+     * @param  array<int, array{date: string, start_time?: ?string, end_time?: ?string}>  $days
+     * @return list<array{0: CarbonImmutable, 1: CarbonImmutable}>
+     */
+    public function periodsFromDays(array $days): array
+    {
+        $rows = [];
+        foreach ($days as $i => $day) {
+            $date = CarbonImmutable::createFromFormat('!Y-m-d', $day['date']);
+            $start = $date->setTimeFromTimeString($day['start_time'] ?? '00:00');
+            $end = $date->setTimeFromTimeString($day['end_time'] ?? '23:59');
+            if ($end->lte($start)) {
+                throw ValidationException::withMessages([
+                    "days.{$i}.end_time" => sprintf('De eindtijd moet na de begintijd liggen (%s).', $date->translatedFormat('D j M')),
+                ]);
+            }
+            $rows[] = [$start, $end];
+        }
+        usort($rows, fn ($a, $b) => $a[0] <=> $b[0]);
+
+        $periods = [];
+        foreach ($rows as [$start, $end]) {
+            $last = count($periods) - 1;
+            $adjoins = $last >= 0
+                && $periods[$last][1]->format('H:i') === '23:59'
+                && $start->equalTo($periods[$last][1]->addDay()->startOfDay());
+            if ($adjoins) {
+                $periods[$last][1] = $end;
+            } else {
+                $periods[] = [$start, $end];
+            }
+        }
+
+        return $periods;
     }
 }

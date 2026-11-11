@@ -8,6 +8,7 @@ use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\My\MyController;
 use App\Http\Controllers\OpenShiftController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProfileController;
@@ -37,6 +38,9 @@ Route::middleware(['auth', 'planner'])->group(function () {
 
     Route::resource('medewerkers', EmployeeController::class)
         ->parameters(['medewerkers' => 'employee'])->names('employees')->except('show');
+    Route::post('medewerkers/{employee}/uitnodiging', [EmployeeController::class, 'resendInvitation'])
+        ->middleware('throttle:10,1')->name('employees.invitation');
+    Route::delete('medewerkers/{employee}/inlog', [EmployeeController::class, 'revokeAccount'])->name('employees.account.destroy');
 
     Route::resource('panden', BuildingController::class)
         ->parameters(['panden' => 'building'])->names('buildings');
@@ -70,6 +74,17 @@ Route::middleware(['auth', 'planner'])->group(function () {
         Route::post('shifts/{shift}/assignments', [ShiftApiController::class, 'assign'])->name('shifts.assign');
         Route::delete('shifts/{shift}/assignments/{employee}', [ShiftApiController::class, 'unassign'])->name('shifts.unassign');
     });
+});
+
+// Voor medewerkers met een eigen inlog: alleen hun eigen planning, verlof en beschikbaarheid.
+Route::middleware(['auth', 'employee'])->prefix('mijn')->name('my.')->group(function () {
+    Route::get('/', [MyController::class, 'planning'])->name('planning');
+    Route::get('verlof', [MyController::class, 'absences'])->name('absences');
+    Route::get('verlof/aanvragen', [MyController::class, 'createAbsence'])->name('absences.create');
+    Route::post('verlof', [MyController::class, 'storeAbsence'])->name('absences.store');
+    Route::delete('verlof/{absence}', [MyController::class, 'destroyAbsence'])->name('absences.destroy');
+    Route::get('beschikbaarheid', [MyController::class, 'availability'])->name('availability');
+    Route::put('beschikbaarheid', [MyController::class, 'updateAvailability'])->name('availability.update');
 });
 
 Route::middleware('auth')->group(function () {

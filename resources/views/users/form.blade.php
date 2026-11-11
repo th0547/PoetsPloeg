@@ -18,10 +18,11 @@
         <div>
             <label class="label" for="role">Rol</label>
             <select id="role" name="role" class="input">
-                @foreach (\App\Models\User::ROLES as $value => $label)
-                    <option value="{{ $value }}" @selected(old('role', $user->role) === $value)>{{ $label }}</option>
+                @foreach (\App\Models\User::STAFF_ROLES as $value)
+                    <option value="{{ $value }}" @selected(old('role', $user->role) === $value)>{{ \App\Models\User::ROLES[$value] }}</option>
                 @endforeach
             </select>
+            <p class="mt-1 text-xs text-gray-500">Een inlog voor een medewerker maak je aan bij <a href="{{ route('employees.index') }}" class="text-teal-700 hover:underline">Medewerkers</a>.</p>
         </div>
         <div>
             <label class="label" for="password">Wachtwoord {{ $user->exists ? '(leeg laten = niet wijzigen)' : '' }}</label>

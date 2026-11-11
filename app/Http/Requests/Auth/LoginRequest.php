@@ -50,6 +50,16 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        // Een medewerker-account werkt alleen zolang de medewerker actief is.
+        $user = Auth::user();
+        if ($user->isEmployee() && ! $user->employee?->active) {
+            Auth::guard('web')->logout();
+
+            throw ValidationException::withMessages([
+                'email' => 'Je account is niet actief. Neem contact op met je teamleider.',
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 
