@@ -32,9 +32,12 @@ FROM php:${PHP_VERSION}-fpm-bookworm AS app
 RUN apt-get update && apt-get install -y --no-install-recommends libicu-dev libzip-dev libpng-dev \
     && docker-php-ext-install -j"$(nproc)" pdo_mysql intl zip gd opcache bcmath \
     && rm -rf /var/lib/apt/lists/*
-COPY docker/productie/php.ini /usr/local/etc/php/conf.d/zz-poetsploeg.ini
-COPY docker/productie/fpm.conf /usr/local/etc/php-fpm.d/zz-poetsploeg.conf
-COPY docker/productie/entrypoint.sh /usr/local/bin/poetsploeg-entrypoint
+# Rechten expliciet: de release op de server is uitgepakt met umask 027 (bestanden 640), en
+# COPY neemt die over. Bij de eerste uitrol kon php-fpm (www-data) daardoor zijn eigen
+# configuratie niet lezen en herstartte de app-container eindeloos.
+COPY --chmod=644 docker/productie/php.ini /usr/local/etc/php/conf.d/zz-poetsploeg.ini
+COPY --chmod=644 docker/productie/fpm.conf /usr/local/etc/php-fpm.d/zz-poetsploeg.conf
+COPY --chmod=755 docker/productie/entrypoint.sh /usr/local/bin/poetsploeg-entrypoint
 
 WORKDIR /var/www/poetsploeg
 COPY --from=vendor /bron ./
@@ -44,8 +47,7 @@ COPY --from=assets /bron/public/build ./public/build
 # bij elke uitrol schoon, zodat er geen gecompileerde views van een oude versie blijven.
 RUN mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions \
         storage/framework/views storage/logs bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache \
-    && chmod 755 /usr/local/bin/poetsploeg-entrypoint
+    && chown -R www-data:www-data storage bootstrap/cache
 
 # De commit zit in de image, zodat /gezond kan laten zien welke versie er echt draait.
 ARG POETSPLOEG_COMMIT=onbekend
@@ -57,5 +59,5 @@ CMD ["php-fpm"]
 
 # --- web: Caddy -----------------------------------------------------------------------------
 FROM caddy:2-alpine AS web
-COPY docker/productie/Caddyfile /etc/caddy/Caddyfile
+COPY --chmod=644 docker/productie/Caddyfile /etc/caddy/Caddyfile
 COPY --from=app /var/www/poetsploeg/public /var/www/poetsploeg/public
