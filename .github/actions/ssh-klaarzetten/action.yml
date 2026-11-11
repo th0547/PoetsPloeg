@@ -1,0 +1,54 @@
+name: SSH klaarzetten
+description: >
+  Zet de uitrolsleutel en de vastgelegde hostsleutel van de server klaar, zodat volgende
+  stappen `ssh poetsploeg <opdracht>` kunnen draaien.
+
+inputs:
+  sleutel:
+    description: Privésleutel van de gebruiker uitrol (secret UITROL_SLEUTEL)
+    required: true
+  hostsleutel:
+    description: known_hosts-regel van de server (secret UITROL_HOSTSLEUTEL)
+    required: true
+  host:
+    description: IP-adres of hostnaam (secret UITROL_HOST)
+    required: true
+  gebruiker:
+    description: SSH-gebruiker (secret UITROL_GEBRUIKER)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Sleutels en ssh-config schrijven
+      shell: bash
+      # Secrets via env, nooit als ${{ }} in het script: anders kan de inhoud van een
+      # secret als shellcode gelezen worden.
+      env:
+        SLEUTEL: ${{ inputs.sleutel }}
+        HOSTSLEUTEL: ${{ inputs.hostsleutel }}
+        HOST: ${{ inputs.host }}
+        GEBRUIKER: ${{ inputs.gebruiker }}
+      run: |
+        set -euo pipefail
+        install -d -m 700 ~/.ssh
+        # tr -d '\r': een sleutel die vanuit Windows in een secret geplakt is, heeft
+        # CRLF-regeleinden. ssh weigert hem dan met een melding die niet zegt waarom.
+        printf '%s\n' "$SLEUTEL" | tr -d '\r' > ~/.ssh/uitrol
+        printf '%s\n' "$HOSTSLEUTEL" | tr -d '\r' > ~/.ssh/known_hosts_poetsploeg
+        chmod 600 ~/.ssh/uitrol ~/.ssh/known_hosts_poetsploeg
+        ssh-keygen -y -f ~/.ssh/uitrol > /dev/null || { echo "UITROL_SLEUTEL is geen geldige privésleutel"; exit 1; }
+        # StrictHostKeyChecking=yes met de vastgelegde hostsleutel; nooit accept-new in CI.
+        cat > ~/.ssh/config <<CONFIG
+        Host poetsploeg
+          HostName $HOST
+          User $GEBRUIKER
+          IdentityFile ~/.ssh/uitrol
+          IdentitiesOnly yes
+          UserKnownHostsFile ~/.ssh/known_hosts_poetsploeg
+          StrictHostKeyChecking yes
+          ServerAliveInterval 30
+          ConnectTimeout 20
+        CONFIG
+        chmod 600 ~/.ssh/config
+        ssh poetsploeg ping

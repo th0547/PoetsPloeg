@@ -1,0 +1,44 @@
+name: Onderhoud
+
+# Onderhoud zonder in te loggen. Alleen benoemde taken uit een keuzelijst, nooit een vrij
+# commandoveld. De taken staan in scripts/server/onderhoud.sh.
+on:
+  workflow_dispatch:
+    inputs:
+      taak:
+        description: Taak
+        required: true
+        type: choice
+        options:
+          - status
+          - logs
+          - herstart
+          - opruimen
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uitrol-productie
+  cancel-in-progress: false
+
+jobs:
+  onderhoud:
+    name: ${{ inputs.taak }}
+    runs-on: ubuntu-latest
+    environment: productie
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/ssh-klaarzetten
+        with:
+          sleutel: ${{ secrets.UITROL_SLEUTEL }}
+          hostsleutel: ${{ secrets.UITROL_HOSTSLEUTEL }}
+          host: ${{ secrets.UITROL_HOST }}
+          gebruiker: ${{ secrets.UITROL_GEBRUIKER }}
+
+      - name: Taak uitvoeren
+        env:
+          TAAK: ${{ inputs.taak }}
+        run: ssh poetsploeg "onderhoud $TAAK"

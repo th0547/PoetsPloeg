@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Vast ontvangstscript voor de uitrolsleutel van GitHub Actions.
+# Geïnstalleerd als /usr/local/sbin/poetsploeg-ontvang (root:root, 755) en afgedwongen via
+#   restrict,command="/usr/local/sbin/poetsploeg-ontvang" ssh-ed25519 ... github-actions-poetsploeg
+# in /home/uitrol/.ssh/authorized_keys. De sleutel kan dus alleen dit script starten:
+# geen shell, geen port forwarding.
+#
+# Waarom zo klein: dit script verandert bijna nooit en wordt met de hand geïnstalleerd.
+# Het echte werk staat in scripts/server/uitrol.sh, en dat nemen we uit de commit die
+# uitgerold wordt. Bij het vorige project draaide de server de vorige versie van zijn
+# eigen uitrolscript, omdat hij dat uit de oude checkout haalde.
+#
+# Toegestaan (SSH_ORIGINAL_COMMAND):
+#   ping                 -> "ok poetsploeg", om de sleutel en de hostsleutel te testen
+#   uitrol <40-hex-sha>  -> stdin is een tar (git archive) van die commit
+#   onderhoud <taak>     -> een benoemde taak uit scripts/server/onderhoud.sh (huidige release)
+set -euo pipefail
+umask 027
+
+BASIS=/opt/poetsploeg
+read -r actie arg rest <<<"${SSH_ORIGINAL_COMMAND:-}" || true
+
+weiger() { echo "geweigerd: $*" >&2; exit 2; }
+[ -z "${rest:-}" ] || weiger "te veel argumenten"
+
+# Eén uitrol of onderhoudstaak tegelijk; de lock blijft open over de exec heen.
+exec 9>"$BASIS/.lock"
+flock -w 900 9 || weiger "er loopt al een uitrol of taak"
+
+case "${actie:-}" in
+  ping)
+    echo "ok poetsploeg"
+    ;;
+  uitrol)
+    [[ "${arg:-}" =~ ^[0-9a-f]{40}$ ]] || weiger "uitrol verwacht een volledige commit-sha"
+    doel="$BASIS/releases/$arg"
+    tmp=$(mktemp -d "$BASIS/releases/.ontvang.XXXXXX")
+    trap 'rm -rf "$tmp"' EXIT
+    tar -x --no-same-owner -C "$tmp"
+    [ -f "$tmp/scripts/server/uitrol.sh" ] || weiger "scripts/server/uitrol.sh ontbreekt in de commit"
+    rm -rf "$doel"
+    mv "$tmp" "$doel"
+    trap - EXIT
+    exec bash "$doel/scripts/server/uitrol.sh" "$arg"
+    ;;
+  onderhoud)
+    [[ "${arg:-}" =~ ^[a-z][a-z-]{0,30}$ ]] || weiger "ongeldige taaknaam"
+    [ -f "$BASIS/huidig/scripts/server/onderhoud.sh" ] || weiger "nog geen release uitgerold"
+    exec bash "$BASIS/huidig/scripts/server/onderhoud.sh" "$arg"
+    ;;
+  *)
+    weiger "onbekende opdracht"
+    ;;
+esac
