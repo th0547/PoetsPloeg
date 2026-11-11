@@ -38,6 +38,8 @@
                         Bezetting <span class="font-normal text-gray-500" x-text="'(' + (shift?.assignments.length ?? 0) + '/' + (shift?.required_staff ?? 0) + ')'"></span>
                     </h3>
                     <span x-show="shift?.open_slots > 0" class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800" x-text="shift?.open_slots + ' open'"></span>
+                    <span x-show="shift?.extra_staff > 0" class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800"
+                          title="Meer mensen ingepland dan de bezetting vraagt" x-text="'+' + shift?.extra_staff + ' extra'"></span>
                 </div>
                 <ul class="mt-2 divide-y rounded-md border">
                     <template x-for="a in shift?.assignments ?? []" :key="a.employee_id">
@@ -68,6 +70,9 @@
             <section x-show="candidates !== null">
                 <h3 class="text-sm font-semibold text-gray-900">Geschikte medewerkers</h3>
                 <p class="text-xs text-gray-500">Gerangschikt op beschikbaarheid, vaardigheden, pandkennis en uren.</p>
+                <p x-show="isFull()" class="mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+                    Deze dienst is volledig bezet. Je kunt toch iemand <strong>extra</strong> inplannen, bijvoorbeeld als extra hulp of om mee te kijken.
+                </p>
                 <div x-show="candidatesLoading" class="mt-2 text-sm text-gray-500">Zoeken…</div>
                 <ul class="mt-2 space-y-2">
                     <template x-for="(c, i) in candidates?.candidates ?? []" :key="c.id">
@@ -78,9 +83,9 @@
                                     <span class="font-medium" x-text="c.name"></span>
                                     <a x-show="c.phone" :href="'tel:' + c.phone" class="text-xs text-teal-700 hover:underline" x-text="c.phone"></a>
                                 </div>
-                                <button type="button" class="rounded-md border border-teal-600 px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-600 hover:text-white"
-                                        :disabled="shift?.open_slots === 0 && !replacing()" :class="shift?.open_slots === 0 && !replacing() ? 'opacity-40 cursor-not-allowed' : ''"
-                                        @click="assign(c.id, 'replacement')" x-text="replacing() ? 'Vervangt ' + replacing().name.split(' ')[0] : 'Inplannen'">Inplannen</button>
+                                <button type="button" class="shrink-0 rounded-md border px-2 py-1 text-xs font-medium hover:text-white"
+                                        :class="isFull() ? 'border-sky-600 text-sky-700 hover:bg-sky-600' : 'border-teal-600 text-teal-700 hover:bg-teal-600'"
+                                        @click="assign(c.id, isFull() ? 'manual' : 'replacement')" x-text="assignLabel()">Inplannen</button>
                             </div>
                             <div class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
                                 <template x-for="r in c.reasons">

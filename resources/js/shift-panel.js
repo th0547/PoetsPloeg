@@ -45,6 +45,17 @@ export default function shiftPanel() {
             return this.replace && this.shift ? this.shift.assignments.find((a) => a.employee_id === this.replace) : null;
         },
 
+        /** Volledig bezet (en niemand te vervangen): wie je nu inplant, komt er extra bij. */
+        isFull() {
+            return !!this.shift && this.shift.open_slots === 0 && !this.replacing();
+        },
+
+        assignLabel() {
+            const replacing = this.replacing();
+            if (replacing) return 'Vervangt ' + replacing.name.split(' ')[0];
+            return this.isFull() ? '+ Extra inplannen' : 'Inplannen';
+        },
+
         async open(id, withCandidates = false, replace = null) {
             this.replace = replace;
             this.notice = null;

@@ -147,6 +147,9 @@
                                                     @if ($shift->openSlots())
                                                         <span class="chip whitespace-nowrap bg-orange-100 text-orange-800">{{ $shift->openSlots() }} open</span>
                                                     @endif
+                                                    @if ($shift->extraStaff())
+                                                        <span class="chip whitespace-nowrap bg-sky-100 text-sky-800" title="Meer mensen ingepland dan de bezetting vraagt">+{{ $shift->extraStaff() }} extra</span>
+                                                    @endif
                                                 </span>
                                             </button>
                                         @empty

@@ -4,9 +4,9 @@ Webapplicatie om schoonmaakdiensten voor meerdere panden te plannen, met vaste e
 
 ## Wat kan het?
 
-- **Panden** met pandinfo (adres, contact, toegangsinstructies) en **vaste taken**: wekelijks, elke N weken, maandelijks op de N-de weekdag of op een vaste dag. Elke taak heeft tijden, het aantal personen, vereiste vaardigheden en een vaste bezetting.
+- **Panden** met pandinfo (adres, contact, toegangsinstructies) en **vaste taken**: wekelijks, om de week of minder vaak, maandelijks op een weekdag (bijv. de eerste maandag) of op een vaste datum. Elke taak heeft tijden, het aantal personen, vereiste vaardigheden en een vaste bezetting.
 - **Diensten worden automatisch ingepland** tot 12 weken vooruit. Feestdagen worden desgewenst overgeslagen. Handmatig aangepaste diensten blijven altijd staan.
-- **Medewerkers** met vaardigheden, pandkennis (ingewerkt op), een vast weekpatroon van beschikbaarheid en contracturen (min/max per week).
+- **Medewerkers** met vaardigheden, pandkennis (ingewerkt op), een vast weekpatroon van beschikbaarheid (eenmalige afwijkingen leg je vast als afwezigheid) en contracturen (min/max per week).
 - **Verlof, ziekte en uitval**: bij registratie wordt de medewerker automatisch van zijn diensten gehaald. Die diensten komen in "Open diensten" met de knop **Zoek vervanger**.
 - **Vervangerszoeker**: rangschikt geschikte collega's op beschikbaarheid, vaardigheden, pandkennis en uren. Wie afwezig of al ingepland is, valt af. Bij elke kandidaat staat de reden ("✓ kent pand, ✗ 2 u boven contract").
 - **Gantt-planning** per medewerker of per pand (dag, week of maand), met slepen en neerzetten. Elke wijziging wordt gecontroleerd op dubbel ingepland, afwezigheid, beschikbaarheid, vaardigheden, pandkennis en contracturen.

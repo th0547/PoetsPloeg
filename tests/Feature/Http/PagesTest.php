@@ -117,12 +117,14 @@ class PagesTest extends TestCase
         $response = $this->post(route('absences.store'), [
             'employee_id' => $employee->id,
             'type' => 'ziek',
-            'start_date' => '2026-10-12',
-            'end_date' => '2026-10-13',
+            'days' => [['date' => '2026-10-12'], ['date' => '2026-10-13']],
         ]);
 
+        // Twee aansluitende hele dagen worden één periode.
+        $this->assertSame(1, Absence::count());
         $absence = Absence::first();
         $response->assertRedirect(route('absences.show', $absence));
+        $this->assertSame('2026-10-12 00:00', $absence->starts_at->format('Y-m-d H:i'));
         $this->assertSame('2026-10-13 23:59', $absence->ends_at->format('Y-m-d H:i'));
         $this->assertSame(0, $shift->assignments()->count());
         $this->get(route('absences.show', $absence))->assertSee('Zoek vervanger');
