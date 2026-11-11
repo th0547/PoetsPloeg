@@ -62,9 +62,9 @@
                             </div>
                         </div>
                         @if ($row['state'] === 'todo' && $absence->isPending())
-                            <button type="button" class="btn btn-sm shrink-0" onclick="openShift({{ $shift->id }}, true, {{ $absence->employee_id }})">Zoek vervanger</button>
+                            <button type="button" class="btn btn-sm shrink-0" data-open-shift="{{ $shift->id }}" data-candidates data-replace="{{ $absence->employee_id }}">Zoek vervanger</button>
                         @elseif ($row['state'] === 'open' && ! $shift->cancelled_at)
-                            <button type="button" class="btn btn-sm shrink-0" onclick="openShift({{ $shift->id }}, true)">Plek invullen</button>
+                            <button type="button" class="btn btn-sm shrink-0" data-open-shift="{{ $shift->id }}" data-candidates>Plek invullen</button>
                         @endif
                     </li>
                 @empty
@@ -75,12 +75,12 @@
 
         <div class="flex flex-wrap gap-3">
             @if ($absence->isPending())
-                <form method="POST" action="{{ route('absences.reject', $absence) }}" onsubmit="return confirm('Verlofverzoek afwijzen?')">
+                <form method="POST" action="{{ route('absences.reject', $absence) }}" data-confirm="Verlofverzoek afwijzen?">
                     @csrf
                     <button type="submit" class="btn-danger">Verzoek afwijzen</button>
                 </form>
             @endif
-            <form method="POST" action="{{ route('absences.destroy', $absence) }}" onsubmit="return confirm('Intrekken? Al ingeplande vervangers blijven staan. De registratie blijft bewaard in de geschiedenis.')">
+            <form method="POST" action="{{ route('absences.destroy', $absence) }}" data-confirm="Intrekken? Al ingeplande vervangers blijven staan. De registratie blijft bewaard in de geschiedenis.">
                 @csrf @method('DELETE')
                 <button type="submit" class="btn-secondary">Intrekken</button>
             </form>

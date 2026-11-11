@@ -260,7 +260,7 @@
     </form>
 
     @if ($template->exists)
-        <form method="POST" action="{{ route('buildings.templates.destroy', [$building, $template]) }}" class="mt-8" onsubmit="return confirm('Taak verwijderen? Toekomstige (niet aangepaste) diensten van deze taak verdwijnen uit de planning.')">
+        <form method="POST" action="{{ route('buildings.templates.destroy', [$building, $template]) }}" class="mt-8" data-confirm="Taak verwijderen? Toekomstige (niet aangepaste) diensten van deze taak verdwijnen uit de planning.">
             @csrf @method('DELETE')
             <button type="submit" class="btn-danger">Taak verwijderen</button>
         </form>

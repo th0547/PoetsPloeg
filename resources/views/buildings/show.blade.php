@@ -135,7 +135,7 @@
                                 @foreach ($days as $day)
                                     <td class="px-2 py-2 align-top {{ $day->isToday() ? 'bg-teal-50/40' : '' }}">
                                         @forelse ($grid->get($row['key'], collect())->get($day->toDateString(), []) as $shift)
-                                            <button type="button" onclick="openShift({{ $shift->id }}, {{ $shift->openSlots() ? 'true' : 'false' }})"
+                                            <button type="button" data-open-shift="{{ $shift->id }}" @if ($shift->openSlots()) data-candidates @endif
                                                     class="mb-1 block w-full rounded-md border px-2 py-1 text-left hover:border-teal-400 hover:bg-teal-50 {{ $shift->openSlots() ? 'border-dashed border-orange-300 bg-orange-50/50' : 'border-gray-200' }}">
                                                 @if ($row['key'] === 'los' || $shift->starts_at->format('H:i').'–'.$shift->ends_at->format('H:i') !== $row['time'])
                                                     <span class="block text-xs text-gray-500">{{ $shift->starts_at->format('H:i') }}–{{ $shift->ends_at->format('H:i') }}{{ $row['key'] === 'los' ? ' · '.$shift->title : '' }}</span>

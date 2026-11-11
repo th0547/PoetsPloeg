@@ -16,6 +16,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class ShiftApiController extends Controller
 {
@@ -129,6 +130,7 @@ class ShiftApiController extends Controller
     {
         $shift->load(['building', 'template', 'skills:id,name', 'assignments.employee:id,name,phone,color']);
         $warnings = $this->checker->forShifts(collect([$shift]))[$shift->id] ?? [];
+        $contact = Gate::allows('view-contact-details');
 
         return [
             'id' => $shift->id,
@@ -156,14 +158,14 @@ class ShiftApiController extends Controller
                 'name' => $shift->building->name,
                 'color' => $shift->building->color,
                 'address' => $shift->building->fullAddress(),
-                'contact' => trim($shift->building->contact_name.' '.$shift->building->contact_phone),
-                'access' => $shift->building->access_instructions,
+                'contact' => $contact ? trim($shift->building->contact_name.' '.$shift->building->contact_phone) : null,
+                'access' => $contact ? $shift->building->access_instructions : null,
                 'url' => route('buildings.show', $shift->building),
             ],
             'assignments' => $shift->assignments->map(fn ($a) => [
                 'employee_id' => $a->employee_id,
                 'name' => $a->employee->name,
-                'phone' => $a->employee->phone,
+                'phone' => $contact ? $a->employee->phone : null,
                 'color' => $a->employee->color,
                 'source' => ShiftAssignment::SOURCES[$a->source] ?? $a->source,
                 'warnings' => $warnings[$a->employee_id] ?? [],

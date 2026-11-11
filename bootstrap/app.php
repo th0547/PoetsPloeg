@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\ContentSecurityPolicy;
 use App\Http\Middleware\EnsureCanPlan;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -13,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias(['planner' => EnsureCanPlan::class]);
+        $middleware->web(append: [ContentSecurityPolicy::class]);
 
         // Achter een https-proxy (Codespaces, Docker) de juiste host en https-links gebruiken.
         // Op de VPS leeg laten: daar staat nginx direct aan de buitenkant.

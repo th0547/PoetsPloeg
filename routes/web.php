@@ -11,16 +11,20 @@ use App\Http\Controllers\HealthController;
 use App\Http\Controllers\OpenShiftController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SecurityTxtController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SkillController;
 use App\Http\Controllers\TaskTemplateController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
-// Health-check voor de uitrol: geeft de commit terug die echt draait (uit de image, zie
-// docker/productie/Dockerfile) en controleert de database. De uitrol-workflow is pas groen
-// als deze commit gelijk is aan de commit die uitgerold werd.
+// Health-check voor de uitrol: controleert de database. Met ?commit=<sha> zegt hij ook of die commit
+// draait (uit de image, zie docker/productie/Dockerfile), zonder de commit zelf te noemen. De
+// uitrol-workflow is pas groen als de uitgerolde commit "juist" is.
 Route::get('/gezond', HealthController::class)->name('health');
+
+// Contact voor het melden van beveiligingsproblemen (RFC 9116).
+Route::get('/.well-known/security.txt', SecurityTxtController::class)->name('security-txt');
 
 Route::middleware(['auth', 'planner'])->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');

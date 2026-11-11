@@ -5,7 +5,7 @@
             <form method="GET" class="flex flex-wrap items-center gap-2">
                 <input type="search" name="q" value="{{ request('q') }}" placeholder="Zoeken…" class="rounded-md border-gray-300 text-sm shadow-sm">
                 <label class="inline-flex items-center gap-1 text-sm text-gray-600">
-                    <input type="checkbox" name="inactief" value="1" class="checkbox" @checked(request()->boolean('inactief')) onchange="this.form.submit()"> ook inactief
+                    <input type="checkbox" name="inactief" value="1" class="checkbox" @checked(request()->boolean('inactief')) data-auto-submit> ook inactief
                 </label>
             </form>
             <a href="{{ route('employees.create') }}" class="btn">+ Medewerker</a>

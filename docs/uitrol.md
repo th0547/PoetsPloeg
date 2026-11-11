@@ -1,8 +1,9 @@
 # Uitrol en server
 
 PoetsPloeg draait op een eigen Hetzner-server met Docker. Elke merge naar `main` wordt
-automatisch uitgerold via GitHub Actions. De workflow is pas groen als `/gezond` precies de
-uitgerolde commit teruggeeft.
+automatisch uitgerold via GitHub Actions. De workflow is pas groen als `/gezond?commit=<sha>` de
+uitgerolde commit bevestigt (`"versie":"juist"`). Zonder `?commit=` noemt `/gezond` de commit niet,
+zodat buitenstaanders de codeversie niet kunnen zien.
 
 | | |
 |---|---|
@@ -31,9 +32,9 @@ merge naar main
        │              ├─ docker compose build (commit in de image)
        │              ├─ database op, migraties, nieuwe containers
        │              ├─ /opt/poetsploeg/huidig → deze release
-       │              ├─ /gezond moet <sha> teruggeven
+       │              ├─ /gezond?commit=<sha> moet "juist" zeggen
        │              └─ opruimen: oude releases (5 blijven), images, bouwcache
-       └─ health-check van buitenaf: /gezond moet <sha> teruggeven
+       └─ health-check van buitenaf: /gezond?commit=<sha> moet "juist" zeggen
 ```
 
 Containers (`infra/compose.yaml`, projectnaam `poetsploeg`):
@@ -144,7 +145,7 @@ Gebruik op productie **nooit** `--seed`: dat zet demodata en demo-accounts in de
 |---|---|
 | Uitrol stopt bij "… is leeg in /opt/poetsploeg/.env" | Vul die waarde in `.env` in |
 | Health-check faalt, certificaat | Wijst de DNS (A én AAAA) naar de server? Onderhoud → `logs`, zoek naar `web` |
-| Health-check geeft een oude commit | Draaien de nieuwe containers? Onderhoud → `status` |
+| Health-check zegt `"versie":"anders"` | Draaien de nieuwe containers? Onderhoud → `status` (toont ook de draaiende commit) |
 | `Host key verification failed` in Actions | Is de server vervangen? Dan `UITROL_HOSTSLEUTEL` bijwerken, na controle van de vingerafdruk |
 | `Permission denied (publickey)` in Actions | `UITROL_SLEUTEL` of de regel in `authorized_keys` klopt niet |
 | Schijf loopt vol | Onderhoud → `opruimen` |

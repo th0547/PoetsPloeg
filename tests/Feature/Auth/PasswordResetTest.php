@@ -70,4 +70,19 @@ class PasswordResetTest extends TestCase
             return true;
         });
     }
+
+    public function test_reset_link_request_does_not_reveal_whether_an_account_exists(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create();
+
+        $known = $this->post('/forgot-password', ['email' => $user->email]);
+        $unknown = $this->post('/forgot-password', ['email' => 'bestaat-niet@example.org']);
+        $again = $this->post('/forgot-password', ['email' => $user->email]); // binnen de wachttijd
+
+        foreach ([$known, $unknown, $again] as $response) {
+            $response->assertSessionHasNoErrors()->assertSessionHas('status', __('passwords.sent'));
+        }
+        Notification::assertSentToTimes($user, ResetPassword::class, 1);
+    }
 }

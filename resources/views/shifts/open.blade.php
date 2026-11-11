@@ -12,12 +12,12 @@
             </p>
         </div>
         <form method="GET" class="flex flex-wrap items-center gap-2">
-            <select name="weken" onchange="this.form.submit()" class="rounded-md border-gray-300 text-sm shadow-sm" aria-label="Periode">
+            <select name="weken" data-auto-submit class="rounded-md border-gray-300 text-sm shadow-sm" aria-label="Periode">
                 @foreach (\App\Http\Controllers\OpenShiftController::PERIODS as $value => $label)
                     <option value="{{ $value }}" @selected($weeks === $value)>Komende {{ $label }}</option>
                 @endforeach
             </select>
-            <select name="pand" onchange="this.form.submit()" class="rounded-md border-gray-300 text-sm shadow-sm" aria-label="Pand">
+            <select name="pand" data-auto-submit class="rounded-md border-gray-300 text-sm shadow-sm" aria-label="Pand">
                 <option value="">Alle panden</option>
                 @foreach ($buildings as $building)
                     <option value="{{ $building->id }}" @selected($buildingId === $building->id)>{{ $building->name }}</option>
@@ -54,7 +54,7 @@
                                     <span class="chip bg-orange-100 text-orange-800">{{ $shift->openSlots() }} van {{ $shift->required_staff }} open</span>
                                 </div>
                             </div>
-                            <button type="button" class="btn btn-sm shrink-0" onclick="openShift({{ $shift->id }}, true)">Zoek vervanger</button>
+                            <button type="button" class="btn btn-sm shrink-0" data-open-shift="{{ $shift->id }}" data-candidates>Zoek vervanger</button>
                         </li>
                     @endforeach
                 </ul>

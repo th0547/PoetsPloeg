@@ -51,14 +51,15 @@ jobs:
           URL: ${{ steps.domein.outputs.url }}
         run: |
           for _ in $(seq 1 20); do
-            if antwoord=$(curl -fsS --max-time 10 "$URL/gezond"); then
+            # /gezond noemt de commit niet, maar bevestigt hem als je hem meestuurt.
+            if antwoord=$(curl -fsS --max-time 10 "$URL/gezond?commit=$GITHUB_SHA"); then
               echo "$antwoord"
-              if [ "$(jq -r .commit <<<"$antwoord")" = "$GITHUB_SHA" ]; then
+              if [ "$(jq -r .versie <<<"$antwoord")" = "juist" ]; then
                 echo "Draait: $GITHUB_SHA"
                 exit 0
               fi
             fi
             sleep 5
           done
-          echo "::error::$URL/gezond geeft niet commit $GITHUB_SHA terug"
+          echo "::error::$URL/gezond bevestigt commit $GITHUB_SHA niet"
           exit 1
