@@ -73,7 +73,8 @@ jobs:
         run: |
           # Lege verplichte waarden laten `config` falen; vul ze voor deze controle met nep.
           sed -e 's/^\(APP_KEY\|DB_PASSWORD\|DB_ROOT_PASSWORD\)=$/\1=nep/' infra/env.productie.voorbeeld > /tmp/ci.env
-          POETSPLOEG_ENV=/tmp/ci.env docker compose -f infra/compose.yaml --env-file /tmp/ci.env config --quiet
+          POETSPLOEG_ENV=/tmp/ci.env docker compose -f infra/compose.yaml \
+            --env-file /tmp/ci.env --env-file infra/productie.env config --quiet
 
       - name: Caddyfile valideren
         run: |

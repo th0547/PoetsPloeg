@@ -1,5 +1,6 @@
 # Productie op de server. Gestart door scripts/server/uitrol.sh met:
-#   docker compose -p poetsploeg -f <release>/infra/compose.yaml --env-file /opt/poetsploeg/.env ...
+#   docker compose -p poetsploeg -f <release>/infra/compose.yaml \
+#     --env-file /opt/poetsploeg/.env --env-file <release>/infra/productie.env ...
 # De projectnaam staat vast (poetsploeg), zodat de volumes bij elke release dezelfde blijven,
 # ook al staat elke release in een eigen map.
 #
@@ -14,8 +15,11 @@ x-app: &app
     args:
       POETSPLOEG_COMMIT: ${POETSPLOEG_COMMIT:-onbekend}
   image: poetsploeg-app:latest
+  # Eerst de geheimen van de server, dan de instellingen uit git (die winnen).
   # In CI wijst POETSPLOEG_ENV naar een voorbeeldbestand om de compose-config te testen.
-  env_file: ${POETSPLOEG_ENV:-/opt/poetsploeg/.env}
+  env_file:
+    - ${POETSPLOEG_ENV:-/opt/poetsploeg/.env}
+    - productie.env
   environment:
     # Vast voor deze opzet; hoeft dus niet in .env.
     APP_ENV: production
@@ -54,10 +58,10 @@ services:
   db:
     image: mysql:8.4
     environment:
-      MYSQL_DATABASE: ${DB_DATABASE:?DB_DATABASE ontbreekt in .env}
-      MYSQL_USER: ${DB_USERNAME:?DB_USERNAME ontbreekt in .env}
-      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD ontbreekt in .env}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD ontbreekt in .env}
+      MYSQL_DATABASE: ${DB_DATABASE:?DB_DATABASE ontbreekt}
+      MYSQL_USER: ${DB_USERNAME:?DB_USERNAME ontbreekt}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD ontbreekt}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD ontbreekt}
       TZ: Europe/Amsterdam
     volumes:
       - dbdata:/var/lib/mysql
@@ -78,7 +82,7 @@ services:
       target: web
     image: poetsploeg-web:latest
     environment:
-      POETSPLOEG_DOMEIN: ${POETSPLOEG_DOMEIN:?POETSPLOEG_DOMEIN ontbreekt in .env}
+      POETSPLOEG_DOMEIN: ${POETSPLOEG_DOMEIN:?POETSPLOEG_DOMEIN ontbreekt}
     # Alleen TCP: HTTP/3 staat uit in de Caddyfile (zie daar waarom).
     ports:
       - "80:80"

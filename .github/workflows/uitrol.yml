@@ -20,17 +20,18 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: productie
-      url: ${{ vars.UITROL_URL }}
+      url: ${{ steps.domein.outputs.url }}
     timeout-minutes: 30
-    # Het domein is een variabele van de environment (UITROL_URL, bijv. https://e-rp.nl), zodat
-    # wisselen van domein geen codewijziging is: alleen .env op de server en deze variabele.
-    env:
-      URL: ${{ vars.UITROL_URL }}
     steps:
-      - name: UITROL_URL is ingesteld
-        run: '[ -n "$URL" ] || { echo "::error::Variabele UITROL_URL ontbreekt in environment productie"; exit 1; }'
-
       - uses: actions/checkout@v6
+
+      # Het domein staat in git (infra/productie.env), net als op de server: één bron.
+      - name: Domein bepalen
+        id: domein
+        run: |
+          domein=$(grep -E '^POETSPLOEG_DOMEIN=' infra/productie.env | tail -n 1 | cut -d= -f2-)
+          [ -n "$domein" ] || { echo "::error::POETSPLOEG_DOMEIN ontbreekt in infra/productie.env"; exit 1; }
+          echo "url=https://$domein" >> "$GITHUB_OUTPUT"
 
       - uses: ./.github/actions/ssh-klaarzetten
         with:
@@ -46,9 +47,11 @@ jobs:
 
       # "Groen" moet betekenen dat de juiste versie draait, niet alleen dat er iets draait.
       - name: Health-check van buitenaf
+        env:
+          URL: ${{ steps.domein.outputs.url }}
         run: |
           for _ in $(seq 1 20); do
-            if antwoord=$(curl -fsS --max-time 10 "${URL%/}/gezond"); then
+            if antwoord=$(curl -fsS --max-time 10 "$URL/gezond"); then
               echo "$antwoord"
               if [ "$(jq -r .commit <<<"$antwoord")" = "$GITHUB_SHA" ]; then
                 echo "Draait: $GITHUB_SHA"
@@ -57,5 +60,5 @@ jobs:
             fi
             sleep 5
           done
-          echo "::error::${URL%/}/gezond geeft niet commit $GITHUB_SHA terug"
+          echo "::error::$URL/gezond geeft niet commit $GITHUB_SHA terug"
           exit 1

@@ -96,13 +96,6 @@ Environment **`productie`**, alleen te gebruiken vanaf `main`. Secrets:
 | `UITROL_GEBRUIKER` | `uitrol` |
 | `UITROL_HOSTSLEUTEL` | `178.104.225.130 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMktcSsbg2JvZL/3eXzW/zjrXFGLsMxs+Vg6V9XxPj7` (vingerafdruk `SHA256:7clVMsa0tyJhum8vbsCq24oEBtNsbvgFzlLTS/5rylE`, gecontroleerd op de server én vanaf de pc) |
 | `UITROL_SLEUTEL` | privésleutel `poetsploeg_uitrol` |
-
-Variabele (geen secret) in dezelfde environment:
-
-| Variabele | Inhoud |
-|---|---|
-| `UITROL_URL` | `https://e-rp.nl` — waar de health-check van buitenaf naartoe gaat |
-
 Workflows:
 
 | Workflow | Wanneer |
@@ -114,10 +107,15 @@ Workflows:
 Branch protection op `main`: alleen via een PR, en de checks *Lint en tests* en
 *Serverscripts en compose* moeten groen zijn.
 
-## Eerste keer: `.env` op de server
+## Instellingen: `.env` (geheim) en `infra/productie.env` (in git)
 
-Eenmalig, in een SSH-sessie. Zie [`infra/env.productie.voorbeeld`](../infra/env.productie.voorbeeld)
-voor alle waarden.
+- `/opt/poetsploeg/.env` op de server bevat **alleen geheimen**: `APP_KEY`, `DB_PASSWORD`,
+  `DB_ROOT_PASSWORD` en later de SMTP-gegevens. Zie
+  [`infra/env.productie.voorbeeld`](../infra/env.productie.voorbeeld).
+- [`infra/productie.env`](../infra/productie.env) bevat de rest (domein, taal, afzender). Dat
+  wordt ná `.env` geladen en wint bij dubbele namen. Een wijziging is gewoon een PR.
+
+Eenmalig `.env` aanmaken, in een SSH-sessie:
 
 ```bash
 sudo install -o uitrol -g uitrol -m 600 /dev/null /opt/poetsploeg/.env
@@ -135,10 +133,10 @@ Gebruik op productie **nooit** `--seed`: dat zet demodata en demo-accounts in de
 ## Domein wisselen
 
 1. DNS: A- en AAAA-record van het nieuwe domein naar `178.104.225.130` / `2a01:4f8:c0c:c820::1`.
-2. Server (SSH-sessie): `APP_URL` en `POETSPLOEG_DOMEIN` in `/opt/poetsploeg/.env` aanpassen.
-3. GitHub: variabele `UITROL_URL` in environment `productie` aanpassen.
-4. Actions → *Uitrol* → *Run workflow*. Caddy haalt dan zelf een nieuw certificaat.
-5. Reverse DNS in Hetzner (*Networking*) naar het nieuwe domein.
+2. PR die `APP_URL`, `POETSPLOEG_DOMEIN` en `MAIL_FROM_ADDRESS` in `infra/productie.env`
+   aanpast. Na de merge rolt hij vanzelf uit; Caddy haalt zelf een nieuw certificaat en de
+   health-check gaat naar het nieuwe domein.
+3. Reverse DNS in Hetzner (*Networking*) naar het nieuwe domein.
 
 ## Problemen
 

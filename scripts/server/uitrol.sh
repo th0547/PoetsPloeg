@@ -16,8 +16,11 @@ log "uitrol van $SHA"
 # 1. Controleer .env vooraf. Een lege variabele in de Caddyfile liet Caddy bij het vorige
 #    project eindeloos herstarten; liever hier stoppen met een duidelijke melding.
 [ -f "$ENV_BESTAND" ] || fout "$ENV_BESTAND ontbreekt (zie docs/uitrol.md)"
-for naam in APP_KEY APP_URL POETSPLOEG_DOMEIN DB_DATABASE DB_USERNAME DB_PASSWORD DB_ROOT_PASSWORD; do
+for naam in APP_KEY DB_PASSWORD DB_ROOT_PASSWORD; do
     [ -n "$(env_waarde "$naam")" ] || fout "$naam is leeg in $ENV_BESTAND"
+done
+for naam in APP_URL POETSPLOEG_DOMEIN DB_DATABASE DB_USERNAME; do
+    [ -n "$(env_waarde "$naam")" ] || fout "$naam is leeg in infra/productie.env"
 done
 
 # 2. Bouwen op de server, met de commit in de image (voor /gezond).
