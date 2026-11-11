@@ -9,6 +9,7 @@ use App\Models\Shift;
 use App\Models\User;
 use App\Notifications\EmployeeInvitation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Notifications\ChannelManager;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
@@ -310,5 +311,29 @@ class EmployeeAccountTest extends TestCase
         $this->assertSame('medewerker', $employeeUser->fresh()->role);
         $this->post(route('users.store'), ['name' => 'X', 'email' => 'x@example.com', 'role' => 'medewerker', 'password' => 'geheim-wachtwoord', 'password_confirmation' => 'geheim-wachtwoord'])
             ->assertSessionHasErrors('role');
+    }
+
+    public function test_a_failing_mail_server_does_not_break_creating_the_employee(): void
+    {
+        // Echte (onbereikbare) SMTP-server in plaats van de fake.
+        Notification::swap(new ChannelManager(app()));
+        config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => '127.0.0.1', 'mail.mailers.smtp.port' => 1]);
+
+        $this->actingAs($this->teamleader())
+            ->post(route('employees.store'), $this->employeeData(['invite' => '1']))
+            ->assertSessionHas('status', fn ($s) => str_contains($s, 'kon niet worden verstuurd'));
+
+        $employee = Employee::sole();
+        $this->assertTrue($employee->user->invitationPending());
+
+        $this->post(route('employees.invitation', $employee))->assertSessionHasErrors('invite');
+    }
+
+    public function test_test_mail_command(): void
+    {
+        $this->artisan('poetsploeg:test-mail', ['adres' => 'geen-adres'])->assertFailed();
+        $this->artisan('poetsploeg:test-mail', ['adres' => 'test@example.com'])
+            ->expectsOutputToContain('er is niets echt verstuurd')
+            ->assertSuccessful();
     }
 }

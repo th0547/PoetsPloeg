@@ -73,9 +73,9 @@ class EmployeeController extends Controller
     {
         $employee->load('user');
         if (! $employee->user && $request->boolean('invite')) {
-            $this->accounts->invite($employee);
-
-            return " Er is een uitnodiging gestuurd naar {$employee->email} om een wachtwoord in te stellen.";
+            return $this->accounts->invite($employee)
+                ? " Er is een uitnodiging gestuurd naar {$employee->email} om een wachtwoord in te stellen."
+                : ' Het account is aangemaakt, maar de uitnodiging kon niet worden verstuurd (mailserver). Probeer het later opnieuw met "Opnieuw uitnodigen".';
         }
 
         return $this->accounts->sync($employee)
@@ -88,7 +88,10 @@ class EmployeeController extends Controller
     {
         $user = $employee->user;
         abort_unless($user, 404);
-        $this->accounts->sendInvitation($user);
+        if (! $this->accounts->sendInvitation($user)) {
+            return redirect()->route('employees.edit', $employee)
+                ->withErrors(['invite' => 'De uitnodiging kon niet worden verstuurd: de mailserver is niet bereikbaar of weigert de mail. Probeer het later opnieuw.']);
+        }
 
         return redirect()->route('employees.edit', $employee)
             ->with('status', "Nieuwe uitnodiging gestuurd naar {$user->email}. Een eerdere link werkt niet meer.");

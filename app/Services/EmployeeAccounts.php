@@ -11,8 +11,12 @@ use Illuminate\Support\Str;
 /** Inlogaccounts voor medewerkers: aanmaken, uitnodigen en bijhouden. */
 class EmployeeAccounts
 {
-    /** Maak een account met de rol Medewerker en stuur de uitnodiging om een wachtwoord in te stellen. */
-    public function invite(Employee $employee): User
+    /**
+     * Maak een account met de rol Medewerker en stuur de uitnodiging om een wachtwoord in te stellen.
+     *
+     * @return bool of de uitnodiging verstuurd is
+     */
+    public function invite(Employee $employee): bool
     {
         $user = $employee->user ?? new User;
         $user->forceFill([
@@ -28,16 +32,27 @@ class EmployeeAccounts
         $user->save();
         $employee->setRelation('user', $user);
 
-        $this->sendInvitation($user);
-
-        return $user;
+        return $this->sendInvitation($user);
     }
 
-    /** (Opnieuw) een uitnodiging sturen; een eerdere link vervalt daarmee. */
-    public function sendInvitation(User $user): void
+    /**
+     * (Opnieuw) een uitnodiging sturen; een eerdere link vervalt daarmee.
+     *
+     * @return bool false als de mail niet verstuurd kon worden (bijv. mailserver onbereikbaar)
+     */
+    public function sendInvitation(User $user): bool
     {
         $token = Password::broker('invites')->createToken($user);
-        $user->notify(new EmployeeInvitation($token));
+        try {
+            $user->notify(new EmployeeInvitation($token));
+        } catch (\Throwable $e) {
+            // Het account blijft bestaan; de teamleider kan later opnieuw uitnodigen.
+            report($e);
+
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -62,9 +77,7 @@ class EmployeeAccounts
         $user->save();
 
         if ($emailChanged && $user->invitationPending()) {
-            $this->sendInvitation($user);
-
-            return true;
+            return $this->sendInvitation($user);
         }
 
         return false;

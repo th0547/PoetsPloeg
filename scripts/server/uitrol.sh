@@ -22,6 +22,11 @@ done
 for naam in APP_URL POETSPLOEG_DOMEIN DB_DATABASE DB_USERNAME; do
     [ -n "$(env_waarde "$naam")" ] || fout "$naam is leeg in infra/productie.env"
 done
+if [ "$(env_waarde MAIL_MAILER)" = smtp ]; then
+    for naam in MAIL_HOST MAIL_USERNAME MAIL_PASSWORD; do
+        [ -n "$(env_waarde "$naam")" ] || fout "MAIL_MAILER=smtp, maar $naam is leeg (zie infra/env.productie.voorbeeld)"
+    done
+fi
 
 # 2. Bouwen op de server, met de commit in de image (voor /gezond).
 export POETSPLOEG_COMMIT="$SHA"

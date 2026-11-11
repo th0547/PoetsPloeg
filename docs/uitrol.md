@@ -111,7 +111,7 @@ Branch protection op `main`: alleen via een PR, en de checks *Lint en tests* en
 ## Instellingen: `.env` (geheim) en `infra/productie.env` (in git)
 
 - `/opt/poetsploeg/.env` op de server bevat **alleen geheimen**: `APP_KEY`, `DB_PASSWORD`,
-  `DB_ROOT_PASSWORD` en later de SMTP-gegevens. Zie
+  `DB_ROOT_PASSWORD` en de mailinstellingen (`MAIL_MAILER`, `MAIL_USERNAME`, `MAIL_PASSWORD`). Zie
   [`infra/env.productie.voorbeeld`](../infra/env.productie.voorbeeld).
 - [`infra/productie.env`](../infra/productie.env) bevat de rest (domein, taal, afzender). Dat
   wordt ná `.env` geladen en wint bij dubbele namen. Een wijziging is gewoon een PR.
@@ -130,6 +130,37 @@ docker exec -it poetsploeg-app-1 php artisan poetsploeg:create-planner
 ```
 
 Gebruik op productie **nooit** `--seed`: dat zet demodata en demo-accounts in de database.
+
+## Uitgaande mail (Brevo)
+
+Uitnodigingen voor medewerkers en wachtwoordlinks gaan per mail. Tot er een eigen mailserver
+is, gebruiken we de SMTP-relay van Brevo. Host en poort (`smtp-relay.brevo.com:587`) staan al
+in `infra/productie.env`; Hetzner blokkeert poort 25 en 465, 587 werkt wel.
+
+1. In Brevo: **Senders, Domains & Dedicated IPs > Domains** het afzenderdomein (`e-rp.nl`)
+   toevoegen en de DNS-records (Brevo-code, DKIM, DMARC) bij de domeinregistrar zetten. Zonder
+   geverifieerd domein weigert Brevo de afzender `planning@e-rp.nl` of belandt mail in spam.
+2. In Brevo: **SMTP & API > SMTP** een SMTP-sleutel maken. Noteer de SMTP-login (eindigt op
+   `@smtp-brevo.com`) en de sleutel.
+3. Op de server `/opt/poetsploeg/.env` aanvullen:
+
+   ```
+   MAIL_MAILER=smtp
+   MAIL_USERNAME=<smtp-login>@smtp-brevo.com
+   MAIL_PASSWORD=<smtp-sleutel>
+   ```
+
+4. Uitrol opnieuw draaien (Actions > *Uitrol* > *Run workflow*): `herstart` leest `.env` niet
+   opnieuw in. De uitrol stopt als `MAIL_MAILER=smtp` is maar de login of sleutel ontbreekt.
+5. Testen:
+
+   ```bash
+   docker exec poetsploeg-app-1 php artisan poetsploeg:test-mail jouw@adres.nl
+   ```
+
+Het gratis Brevo-abonnement verstuurt tot 300 mails per dag; ruim genoeg voor uitnodigingen en
+wachtwoordlinks. Later overstappen naar een eigen mailserver = alleen `MAIL_HOST`/`MAIL_PORT` in
+`infra/productie.env` en de login in `.env` aanpassen.
 
 ## Domein wisselen
 
