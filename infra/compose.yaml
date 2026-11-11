@@ -56,7 +56,7 @@ services:
     command: ["php", "artisan", "schedule:work"]
 
   db:
-    image: mysql:8.4
+    image: mysql:26.10
     environment:
       MYSQL_DATABASE: ${DB_DATABASE:?DB_DATABASE ontbreekt}
       MYSQL_USER: ${DB_USERNAME:?DB_USERNAME ontbreekt}
