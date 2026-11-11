@@ -6,11 +6,21 @@ updates:
     groups:
       composer:
         update-types: [minor, patch]
+    ignore:
+      # PHPUnit 13 vraagt PHP 8.4; wij draaien 8.3 (zie docker/productie/Dockerfile).
+      # Weer toestaan na een PHP-upgrade.
+      - dependency-name: phpunit/phpunit
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: npm
     directory: /
     schedule: { interval: weekly, day: monday }
     groups:
+      # Vite en zijn plugins horen bij elkaar: laravel-vite-plugin 2 accepteert geen vite 8,
+      # dus los faalden beide PR's. Deze groep staat eerst, want een pakket komt in de
+      # eerste groep waar het in past.
+      vite:
+        patterns: [vite, laravel-vite-plugin, "@tailwindcss/vite"]
       npm:
         update-types: [minor, patch]
 
@@ -26,3 +36,8 @@ updates:
   - package-ecosystem: docker-compose
     directory: /infra
     schedule: { interval: weekly, day: monday }
+    ignore:
+      # Een hoofdversie van MySQL zet de data om en kan niet terug. Bewust en met een
+      # geteste back-up doen, niet via een automatische PR. 8.4 is de LTS-versie.
+      - dependency-name: mysql
+        update-types: [version-update:semver-major]
