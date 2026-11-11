@@ -17,7 +17,7 @@ jobs:
     name: Lint en tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -31,7 +31,7 @@ jobs:
       - name: Lint (Pint)
         run: vendor/bin/pint --test
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -49,7 +49,7 @@ jobs:
     name: Serverscripts en compose
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Scripts die op de server draaien staan in git en worden hier minstens op syntax
       # nagekeken; shellcheck vangt de klassieke fouten (ongequote variabelen e.d.).
@@ -82,10 +82,23 @@ jobs:
             -v "$PWD/docker/productie/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
-      - name: Productie-images bouwen
+      # Bouwen zoals op de server: vanuit `git archive`, uitgepakt met umask 027 (zoals
+      # poetsploeg-ontvang doet). Vanuit de checkout ging het goed, op de server niet: php-fpm
+      # kon zijn configuratie niet lezen (bestanden 640).
+      - name: Productie-images bouwen (zoals op de server)
         run: |
+          mkdir /tmp/release
+          git archive --format=tar HEAD | (umask 027 && tar -x --no-same-owner -C /tmp/release)
+          cd /tmp/release
           docker build -f docker/productie/Dockerfile --target app --build-arg POETSPLOEG_COMMIT="$GITHUB_SHA" -t poetsploeg-app:ci .
           docker build -f docker/productie/Dockerfile --target web -t poetsploeg-web:ci .
 
       - name: Image bevat de commit
         run: test "$(docker run --rm --entrypoint printenv poetsploeg-app:ci POETSPLOEG_COMMIT)" = "$GITHUB_SHA"
+
+      # Als www-data (zoals in productie): configuratie leesbaar en geldig, code leesbaar.
+      - name: php-fpm-config en rechten in de image
+        run: |
+          docker run --rm --entrypoint php-fpm poetsploeg-app:ci -t
+          docker run --rm --entrypoint sh poetsploeg-app:ci -c 'php -r "exit(ini_get(\"opcache.validate_timestamps\") === \"0\" ? 0 : 1);" && test -r artisan && test -r public/index.php && test -r vendor/autoload.php && test -w storage/logs'
+          docker run --rm --entrypoint caddy -e POETSPLOEG_DOMEIN=poetsploeg.example poetsploeg-web:ci validate --config /etc/caddy/Caddyfile --adapter caddyfile
