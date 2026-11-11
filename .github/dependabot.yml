@@ -21,6 +21,9 @@ updates:
       # eerste groep waar het in past.
       vite:
         patterns: [vite, laravel-vite-plugin, "@tailwindcss/vite"]
+      # Zelfde verhaal: vis-data 8 vraagt vis-util 6, vis-timeline 7 wil vis-util 5 (#19).
+      vis:
+        patterns: ["vis-*"]
       npm:
         update-types: [minor, patch]
 
