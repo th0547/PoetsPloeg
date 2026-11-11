@@ -31,6 +31,13 @@
                                 <span class="h-3 w-3 rounded-full" style="background: {{ $employee->color }}"></span>{{ $employee->name }}
                             </a>
                             @unless ($employee->active) <span class="chip">inactief</span> @endunless
+                            @if ($employee->user)
+                                @if ($employee->user->invitationPending())
+                                    <span class="chip bg-amber-100 text-amber-800" title="Uitgenodigd, nog geen wachtwoord ingesteld">uitgenodigd</span>
+                                @else
+                                    <span class="chip bg-teal-50 text-teal-800" title="Kan zelf inloggen">inlog</span>
+                                @endif
+                            @endif
                         </td>
                         <td class="whitespace-nowrap text-gray-600">
                             <div>{{ $employee->phone }}</div>

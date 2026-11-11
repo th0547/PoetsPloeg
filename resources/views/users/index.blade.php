@@ -27,5 +27,8 @@
             </tbody>
         </table>
     </div>
-    <p class="mt-3 max-w-4xl text-xs text-gray-500">Planners en teamleiders hebben dezelfde rechten. Een inlog voor medewerkers volgt in een latere fase.</p>
+    <p class="mt-3 max-w-4xl text-xs text-gray-500">
+        Planners en teamleiders hebben dezelfde rechten.
+        Medewerkers met een eigen inlog ({{ $employeeAccounts }}) staan hier niet: die nodig je uit en beheer je bij <a href="{{ route('employees.index') }}" class="text-teal-700 hover:underline">Medewerkers</a>, onder "Inloggen".
+    </p>
 </x-app-layout>

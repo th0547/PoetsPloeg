@@ -5,6 +5,7 @@ namespace App\Models;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Validation\Rule;
 
 class AvailabilityPattern extends Model
 {
@@ -36,6 +37,21 @@ class AvailabilityPattern extends Model
             'weekday' => 'integer',
             'repeat_every' => 'integer',
             'starts_on' => 'date',
+        ];
+    }
+
+    /** Validatie van de tijdvakken uit het formulier (veld "patterns"). */
+    public static function rules(): array
+    {
+        return [
+            'patterns' => ['array', 'max:100'],
+            'patterns.*.weekday' => ['required', 'integer', 'between:1,7'],
+            'patterns.*.type' => ['required', Rule::in(array_keys(self::TYPES))],
+            'patterns.*.repeat' => ['nullable', Rule::in(array_keys(self::REPEATS))],
+            'patterns.*.starts_on' => ['nullable', 'date'],
+            'patterns.*.note' => ['nullable', 'string', 'max:100'],
+            'patterns.*.start_time' => ['required', 'date_format:H:i'],
+            'patterns.*.end_time' => ['required', 'date_format:H:i'],
         ];
     }
 

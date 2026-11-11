@@ -17,7 +17,7 @@ class SecurityTest extends TestCase
     /** Routes die zonder planner-rechten bereikbaar mogen zijn. */
     private const PUBLIC_OR_PERSONAL = [
         'health', 'security-txt', 'login', 'logout', 'password.request', 'password.email', 'password.reset',
-        'password.store', 'password.confirm', 'password.update', 'verification.notice', 'verification.verify',
+        'password.store', 'invitation.show', 'invitation.store', 'password.confirm', 'password.update', 'verification.notice', 'verification.verify',
         'verification.send', 'profile.edit', 'profile.update', 'profile.destroy', 'storage.local', 'storage.local.upload',
     ];
 
@@ -27,6 +27,8 @@ class SecurityTest extends TestCase
         $open = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route) => $route->getName() && ! str_starts_with($route->uri(), '_') && $route->uri() !== 'up')
             ->reject(fn ($route) => in_array('planner', $route->gatherMiddleware(), true))
+            // Het medewerkersdeel (/mijn) is alleen voor medewerker-accounts.
+            ->reject(fn ($route) => str_starts_with($route->getName(), 'my.') && in_array('employee', $route->gatherMiddleware(), true))
             ->map(fn ($route) => $route->getName())
             ->diff(self::PUBLIC_OR_PERSONAL)
             ->values()
@@ -37,12 +39,15 @@ class SecurityTest extends TestCase
 
     public function test_accounts_without_planner_rights_get_nothing(): void
     {
-        $this->actingAs(User::factory()->create(['role' => 'medewerker']));
+        $this->actingAs(User::factory()->create(['role' => 'medewerker', 'employee_id' => Employee::factory()->create()->id]));
         $shift = Shift::factory()->create();
 
         $this->assertFalse(Gate::allows('plan'));
         $this->assertFalse(Gate::allows('view-contact-details'));
-        $this->get(route('dashboard'))->assertForbidden();
+        $this->get(route('dashboard'))->assertRedirect(route('my.planning'));
+        $this->get(route('planning'))->assertForbidden();
+        $this->get(route('employees.index'))->assertForbidden();
+        $this->get(route('users.index'))->assertForbidden();
         $this->getJson("/api/shifts/{$shift->id}")->assertForbidden();
         $this->getJson("/api/shifts/{$shift->id}/candidates")->assertForbidden();
     }

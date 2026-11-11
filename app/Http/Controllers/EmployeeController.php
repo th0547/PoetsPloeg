@@ -7,7 +7,7 @@ use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Skill;
 use App\Services\AvailabilityEnforcer;
-use Carbon\CarbonImmutable;
+use App\Services\EmployeeAccounts;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,12 +16,12 @@ use Illuminate\View\View;
 
 class EmployeeController extends Controller
 {
-    public function __construct(private AvailabilityEnforcer $enforcer) {}
+    public function __construct(private AvailabilityEnforcer $enforcer, private EmployeeAccounts $accounts) {}
 
     public function index(Request $request): View
     {
         $employees = Employee::query()
-            ->with(['skills:id,name', 'buildings:id,name'])
+            ->with(['skills:id,name', 'buildings:id,name', 'user'])
             ->when($request->query('q'), fn ($q, $term) => $q->where('name', 'like', "%{$term}%"))
             ->when(! $request->boolean('inactief'), fn ($q) => $q->where('active', true))
             ->orderBy('name')
@@ -38,8 +38,9 @@ class EmployeeController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $employee = DB::transaction(fn () => $this->save(new Employee, $request));
+        $message = 'Medewerker aangemaakt.'.$this->accountMessage($employee, $request);
 
-        return redirect()->route('employees.edit', $employee)->with('status', 'Medewerker aangemaakt.');
+        return redirect()->route('employees.edit', $employee)->with('status', $message);
     }
 
     /** Na opslaan: medewerker van diensten buiten de (nieuwe) beschikbaarheid halen. */
@@ -62,42 +63,68 @@ class EmployeeController extends Controller
     public function update(Request $request, Employee $employee): RedirectResponse
     {
         DB::transaction(fn () => $this->save($employee, $request));
+        $message = 'Medewerker opgeslagen.'.$this->accountMessage($employee, $request);
 
-        return redirect()->route('employees.edit', $employee)->with('status', $this->releaseMessage($employee, 'Medewerker opgeslagen.'));
+        return redirect()->route('employees.edit', $employee)->with('status', $this->releaseMessage($employee, $message));
+    }
+
+    /** Na opslaan: account aanmaken (uitnodiging) of naam/e-mail van het bestaande account bijwerken. */
+    private function accountMessage(Employee $employee, Request $request): string
+    {
+        $employee->load('user');
+        if (! $employee->user && $request->boolean('invite')) {
+            $this->accounts->invite($employee);
+
+            return " Er is een uitnodiging gestuurd naar {$employee->email} om een wachtwoord in te stellen.";
+        }
+
+        return $this->accounts->sync($employee)
+            ? " De uitnodiging is opnieuw verstuurd naar {$employee->email}."
+            : '';
+    }
+
+    /** Uitnodiging opnieuw versturen, bijv. als de link verlopen is. */
+    public function resendInvitation(Employee $employee): RedirectResponse
+    {
+        $user = $employee->user;
+        abort_unless($user, 404);
+        $this->accounts->sendInvitation($user);
+
+        return redirect()->route('employees.edit', $employee)
+            ->with('status', "Nieuwe uitnodiging gestuurd naar {$user->email}. Een eerdere link werkt niet meer.");
+    }
+
+    /** Inlog intrekken: het account verdwijnt, de medewerker zelf en de geschiedenis blijven. */
+    public function revokeAccount(Employee $employee): RedirectResponse
+    {
+        abort_unless($employee->user, 404);
+        $employee->user->delete();
+
+        return redirect()->route('employees.edit', $employee)
+            ->with('status', "De inlog van {$employee->name} is ingetrokken. Je kunt later een nieuwe uitnodiging sturen.");
     }
 
     public function destroy(Employee $employee): RedirectResponse
     {
-        $employee->delete();
+        DB::transaction(function () use ($employee) {
+            $employee->user?->delete();
+            $employee->delete();
+        });
 
         return redirect()->route('employees.index')->with('status', 'Medewerker verwijderd.');
     }
 
     private function form(Employee $employee): View
     {
-        $employee->loadMissing(['skills', 'buildings', 'availabilityPatterns']);
+        $employee->loadMissing(['skills', 'buildings', 'availabilityPatterns', 'user']);
         $absences = $employee->exists ? $employee->absences()->get() : collect();
 
         return view('employees.form', [
             'employee' => $employee,
             'skills' => Skill::orderBy('name')->get(),
             'buildings' => Building::orderBy('name')->get(),
-            'patterns' => old('patterns', $employee->availabilityPatterns->map(fn ($p) => [
-                'weekday' => $p->weekday,
-                'type' => $p->type,
-                'repeat' => $p->repeatKey(),
-                'starts_on' => $p->starts_on?->toDateString(),
-                'start_time' => substr($p->start_time, 0, 5),
-                'end_time' => substr($p->end_time, 0, 5),
-                'note' => $p->note,
-            ])->values()->all()),
-            // Goedgekeurde afwezigheid voor het weekoverzicht: die gaat vóór het vaste patroon.
-            'absenceBlocks' => $absences->where('status', 'approved')->where('ends_at', '>=', now()->subWeeks(8))
-                ->map(fn ($a) => [
-                    'start' => $a->starts_at->format('Y-m-d\TH:i'),
-                    'end' => $a->ends_at->format('Y-m-d\TH:i'),
-                    'label' => mb_strtolower($a->typeLabel()),
-                ])->values()->all(),
+            'patterns' => old('patterns', $employee->availabilityRows()),
+            'absenceBlocks' => $employee->absenceBlocks($absences),
             // Lopende en geplande afwezigheid, en daaronder de volledige geschiedenis (nieuwste eerst).
             'absences' => $absences->where('ends_at', '>=', now())->values(),
             'absenceHistory' => $absences->where('ends_at', '<', now())->sortByDesc('starts_at')->values(),
@@ -106,9 +133,16 @@ class EmployeeController extends Controller
 
     private function save(Employee $employee, Request $request): Employee
     {
+        // Met een (nieuw) inlogaccount is het e-mailadres de inlognaam: verplicht en uniek.
+        $account = $employee->user;
+        $needsLogin = $account || $request->boolean('invite');
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
+            'email' => array_filter([
+                $needsLogin ? 'required' : 'nullable', 'email', 'max:255',
+                $needsLogin ? Rule::unique('users', 'email')->ignore($account) : null,
+            ]),
+            'invite' => ['boolean'],
             'phone' => ['nullable', 'string', 'max:50'],
             'color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'contract_hours_min' => ['nullable', 'numeric', 'min:0', 'max:80'],
@@ -119,41 +153,22 @@ class EmployeeController extends Controller
             'skills.*' => ['exists:skills,id'],
             'buildings' => ['array'],
             'buildings.*' => ['exists:buildings,id'],
-            'patterns' => ['array'],
-            'patterns.*.weekday' => ['required', 'integer', 'between:1,7'],
-            'patterns.*.type' => ['required', Rule::in(array_keys(AvailabilityPattern::TYPES))],
-            'patterns.*.repeat' => ['nullable', Rule::in(array_keys(AvailabilityPattern::REPEATS))],
-            'patterns.*.starts_on' => ['nullable', 'date'],
-            'patterns.*.note' => ['nullable', 'string', 'max:100'],
-            'patterns.*.start_time' => ['required', 'date_format:H:i'],
-            'patterns.*.end_time' => ['required', 'date_format:H:i'],
-        ], [], [
+            ...AvailabilityPattern::rules(),
+        ], [
+            'email.required' => 'Vul een e-mailadres in: daarmee logt de medewerker in.',
+            'email.unique' => 'Dit e-mailadres is al in gebruik door een ander account.',
+        ], [
             'contract_hours_max' => 'max. contracturen',
             'contract_hours_min' => 'min. contracturen',
         ]);
 
-        $employee->fill(collect($data)->except(['skills', 'buildings', 'patterns'])->all());
+        $employee->fill(collect($data)->except(['skills', 'buildings', 'patterns', 'invite'])->all());
         $employee->active = $request->boolean('active');
         $employee->save();
 
         $employee->skills()->sync($data['skills'] ?? []);
         $employee->buildings()->sync($data['buildings'] ?? []);
-        $employee->availabilityPatterns()->delete();
-        foreach ($data['patterns'] ?? [] as $pattern) {
-            [$unit, $every] = AvailabilityPattern::REPEATS[$pattern['repeat'] ?? 'w1'];
-            $startsOn = ($every > 1 || $unit === 'day') ? ($pattern['starts_on'] ?? today()->toDateString()) : null;
-            $employee->availabilityPatterns()->create([
-                'type' => $pattern['type'],
-                'repeat_unit' => $unit,
-                'repeat_every' => $every,
-                'starts_on' => $startsOn,
-                // Bij herhaling per dag telt de weekdag niet; we bewaren die van de startdatum (handig voor sorteren).
-                'weekday' => $unit === 'day' ? CarbonImmutable::parse($startsOn)->dayOfWeekIso : $pattern['weekday'],
-                'start_time' => $pattern['start_time'],
-                'end_time' => $pattern['end_time'],
-                'note' => $pattern['note'] ?? null,
-            ]);
-        }
+        $employee->replaceAvailability($data['patterns'] ?? []);
 
         return $employee;
     }

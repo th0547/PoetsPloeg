@@ -107,6 +107,20 @@ class Absence extends Model
         return $this->type === 'verlof' ? 'Verlofverzoek' : 'Verzoek '.mb_strtolower($this->typeLabel());
     }
 
+    /** Periode als tekst, bijv. "ma 3 nov 2026" of "ma 3 nov 2026 t/m vr 7 nov 2026 12:00". */
+    public function periodLabel(): string
+    {
+        $wholeStart = $this->starts_at->format('H:i') === '00:00';
+        $wholeEnd = $this->ends_at->format('H:i') === '23:59';
+        if ($this->starts_at->isSameDay($this->ends_at)) {
+            return $this->starts_at->translatedFormat('D j M Y')
+                .($wholeStart && $wholeEnd ? '' : ', '.$this->starts_at->format('H:i').'–'.$this->ends_at->format('H:i'));
+        }
+
+        return $this->starts_at->translatedFormat('D j M Y').($wholeStart ? '' : ' '.$this->starts_at->format('H:i'))
+            .' t/m '.$this->ends_at->translatedFormat('D j M Y').($wholeEnd ? '' : ' '.$this->ends_at->format('H:i'));
+    }
+
     /** Kleur van het label in lijsten: ziek rood, zorgafspraken blauw, calamiteit oranje. */
     public function chipClass(): string
     {

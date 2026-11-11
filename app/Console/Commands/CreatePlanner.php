@@ -23,7 +23,7 @@ class CreatePlanner extends Command
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', Password::defaults()],
-            'role' => ['required', 'in:'.implode(',', array_keys(User::ROLES))],
+            'role' => ['required', 'in:'.implode(',', User::STAFF_ROLES)],
         ]);
         if ($validator->fails()) {
             foreach ($validator->errors()->all() as $error) {
