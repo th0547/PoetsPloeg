@@ -300,7 +300,7 @@ class PlanningApiController extends Controller
             'content' => e($label),
             'title' => e($title),
             'className' => trim(implode(' ', array_filter([$extraClass, $level ? 'lvl-'.$level : null]))),
-            'style' => 'border-left: 4px solid '.$shift->building->color,
+            'style' => 'border-left: 4px solid '.e($shift->building->color),
         ];
     }
 }

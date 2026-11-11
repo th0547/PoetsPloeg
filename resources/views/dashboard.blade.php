@@ -14,7 +14,7 @@
             <a class="btn-secondary" href="{{ route('dashboard') }}">Vandaag</a>
             <a class="btn-secondary" href="{{ route('dashboard', ['datum' => $day->addDay()->toDateString()]) }}" aria-label="Volgende dag">›</a>
             <form method="GET" action="{{ route('dashboard') }}">
-                <input type="date" name="datum" value="{{ $day->toDateString() }}" onchange="this.form.submit()" class="rounded-md border-gray-300 text-sm shadow-sm">
+                <input type="date" name="datum" value="{{ $day->toDateString() }}" data-auto-submit class="rounded-md border-gray-300 text-sm shadow-sm">
             </form>
         </div>
     </x-slot>
@@ -50,7 +50,7 @@
                         </div>
                         <ul class="divide-y">
                             @foreach ($shifts as $shift)
-                                <li class="px-4 py-2 hover:bg-gray-50 cursor-pointer" onclick="openShift({{ $shift->id }})">
+                                <li class="px-4 py-2 hover:bg-gray-50 cursor-pointer" data-open-shift="{{ $shift->id }}">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                         <div>
                                             <span class="font-mono text-sm text-gray-600">{{ $shift->starts_at->format('H:i') }}–{{ $shift->ends_at->format('H:i') }}</span>
@@ -101,7 +101,7 @@
                                                 · <span class="text-orange-700">{{ $shift->required_staff - $shift->assignments_count }} open</span>
                                             </p>
                                         </div>
-                                        <button type="button" class="btn btn-sm shrink-0" onclick="openShift({{ $shift->id }}, true)">Zoek vervanger</button>
+                                        <button type="button" class="btn btn-sm shrink-0" data-open-shift="{{ $shift->id }}" data-candidates>Zoek vervanger</button>
                                     </div>
                                 </li>
                             @empty

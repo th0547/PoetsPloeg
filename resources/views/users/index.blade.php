@@ -16,7 +16,7 @@
                         <td class="text-right whitespace-nowrap">
                             <a href="{{ route('users.edit', $user) }}" class="text-sm text-teal-700 hover:underline">Wijzigen</a>
                             @unless ($user->is(auth()->user()))
-                                <form method="POST" action="{{ route('users.destroy', $user) }}" class="inline" onsubmit="return confirm('Gebruiker verwijderen?')">
+                                <form method="POST" action="{{ route('users.destroy', $user) }}" class="inline" data-confirm="Gebruiker verwijderen?">
                                     @csrf @method('DELETE')
                                     <button type="submit" class="ms-3 text-sm text-red-600 hover:underline">Verwijderen</button>
                                 </form>

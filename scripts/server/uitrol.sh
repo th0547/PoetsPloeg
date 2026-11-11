@@ -44,7 +44,7 @@ ln -sfn "$RELEASE" "$BASIS/huidig"
 log "health-check"
 gelukt=""
 for _ in $(seq 1 45); do
-    if antwoord=$(gezond 2>/dev/null) && grep -q "\"commit\":\"$SHA\"" <<<"$antwoord"; then
+    if antwoord=$(gezond "$SHA" 2>/dev/null) && grep -q '"versie":"juist"' <<<"$antwoord"; then
         gelukt=1
         break
     fi
@@ -54,7 +54,7 @@ if [ -z "$gelukt" ]; then
     echo "laatste antwoord: ${antwoord:-geen}" >&2
     dc ps >&2 || true
     dc logs --tail 60 --no-color >&2 || true
-    fout "/gezond geeft niet commit $SHA terug"
+    fout "/gezond bevestigt commit $SHA niet"
 fi
 echo "$antwoord"
 

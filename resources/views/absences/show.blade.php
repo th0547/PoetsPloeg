@@ -22,7 +22,7 @@
                             <p class="text-xs text-gray-500">{{ $shift->starts_at->translatedFormat('D j M') }}, {{ $shift->starts_at->format('H:i') }}–{{ $shift->ends_at->format('H:i') }}
                                 · <span class="text-orange-700">{{ $shift->required_staff - $shift->assignments_count }} open</span></p>
                         </div>
-                        <button type="button" class="btn btn-sm" onclick="openShift({{ $shift->id }}, true)">Zoek vervanger</button>
+                        <button type="button" class="btn btn-sm" data-open-shift="{{ $shift->id }}" data-candidates>Zoek vervanger</button>
                     </li>
                 @empty
                     <li class="px-4 py-4 text-sm text-teal-700">Geen open diensten in deze periode. 👍</li>
@@ -30,7 +30,7 @@
             </ul>
         </section>
 
-        <form method="POST" action="{{ route('absences.destroy', $absence) }}" onsubmit="return confirm('Deze afwezigheid intrekken? Eerder vrijgemaakte diensten worden niet automatisch teruggezet. De registratie blijft bewaard in de geschiedenis.')">
+        <form method="POST" action="{{ route('absences.destroy', $absence) }}" data-confirm="Deze afwezigheid intrekken? Eerder vrijgemaakte diensten worden niet automatisch teruggezet. De registratie blijft bewaard in de geschiedenis.">
             @csrf @method('DELETE')
             <button type="submit" class="btn-danger">Afwezigheid intrekken</button>
         </form>

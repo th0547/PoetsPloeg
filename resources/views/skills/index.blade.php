@@ -26,7 +26,7 @@
                             <button x-show="edit" x-cloak type="submit" class="btn btn-sm">Opslaan</button>
                             <button type="button" class="text-sm text-gray-600 hover:underline" @click="edit = !edit" x-text="edit ? 'Annuleren' : 'Wijzigen'"></button>
                         </form>
-                        <form method="POST" action="{{ route('skills.destroy', $skill) }}" onsubmit="return confirm('Vaardigheid verwijderen?')">
+                        <form method="POST" action="{{ route('skills.destroy', $skill) }}" data-confirm="Vaardigheid verwijderen?">
                             @csrf @method('DELETE')
                             <button type="submit" class="text-sm text-red-600 hover:underline">Verwijderen</button>
                         </form>

@@ -81,7 +81,7 @@
     </form>
 
     @if ($building->exists)
-        <form method="POST" action="{{ route('buildings.destroy', $building) }}" class="mt-8 max-w-4xl" onsubmit="return confirm('Pand definitief verwijderen, inclusief alle taken en diensten? Tip: zet het pand liever op inactief.')">
+        <form method="POST" action="{{ route('buildings.destroy', $building) }}" class="mt-8 max-w-4xl" data-confirm="Pand definitief verwijderen, inclusief alle taken en diensten? Tip: zet het pand liever op inactief.">
             @csrf @method('DELETE')
             <button type="submit" class="btn-danger">Pand verwijderen</button>
         </form>

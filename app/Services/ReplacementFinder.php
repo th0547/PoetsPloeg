@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Employee;
 use App\Models\Shift;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * Zoekt en rangschikt geschikte vervangers voor een dienst.
@@ -22,6 +23,7 @@ class ReplacementFinder
 
         $employees = Employee::active()->whereNotIn('id', $assigned)->orderBy('name')->get(['id', 'name', 'color', 'phone']);
         $results = $this->checker->forCandidates($shift, $employees->pluck('id'));
+        $contact = Gate::allows('view-contact-details');
 
         $candidates = [];
         $excluded = [];
@@ -31,7 +33,7 @@ class ReplacementFinder
                 'id' => $employee->id,
                 'name' => $employee->name,
                 'color' => $employee->color,
-                'phone' => $employee->phone,
+                'phone' => $contact ? $employee->phone : null,
                 'week_hours' => $checks['week_hours'],
                 'reasons' => $this->reasons($checks),
                 'warnings' => $results[$employee->id]['warnings'],

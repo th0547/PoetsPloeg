@@ -276,7 +276,7 @@
                     <a href="{{ route('planning', ['view' => 'employee', 'range' => 'week']) }}" class="text-sm text-teal-700 hover:underline">Bekijk in de weekplanning</a>
                 </div>
 
-                <form method="POST" action="{{ route('employees.destroy', $employee) }}" onsubmit="return confirm('Medewerker definitief verwijderen? Alle toewijzingen én de verlof- en afwezigheidsgeschiedenis verdwijnen ook. Tip: zet de medewerker liever op inactief, dan blijft alles bewaard.')">
+                <form method="POST" action="{{ route('employees.destroy', $employee) }}" data-confirm="Medewerker definitief verwijderen? Alle toewijzingen én de verlof- en afwezigheidsgeschiedenis verdwijnen ook. Tip: zet de medewerker liever op inactief, dan blijft alles bewaard.">
                     @csrf @method('DELETE')
                     <button type="submit" class="btn-danger w-full">Medewerker verwijderen</button>
                 </form>

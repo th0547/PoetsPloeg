@@ -9,13 +9,22 @@ class HealthTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_geeft_commit_en_databasestatus_zonder_login(): void
+    public function test_noemt_de_commit_niet(): void
     {
         config(['poetsploeg.commit' => 'abc123']);
 
         $this->getJson('/gezond')
             ->assertOk()
             ->assertHeader('Cache-Control', 'no-store, private')
-            ->assertExactJson(['status' => 'ok', 'commit' => 'abc123', 'database' => 'ok']);
+            ->assertExactJson(['status' => 'ok', 'database' => 'ok']);
+    }
+
+    public function test_bevestigt_alleen_een_meegestuurde_commit(): void
+    {
+        config(['poetsploeg.commit' => 'abc123']);
+
+        $this->getJson('/gezond?commit=abc123')->assertOk()->assertExactJson(['status' => 'ok', 'database' => 'ok', 'versie' => 'juist']);
+        $this->getJson('/gezond?commit=def456')->assertOk()->assertExactJson(['status' => 'ok', 'database' => 'ok', 'versie' => 'anders']);
+        $this->getJson('/gezond?commit=def456')->assertDontSee('abc123');
     }
 }
