@@ -17,7 +17,7 @@ jobs:
     name: Lint en tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -31,7 +31,7 @@ jobs:
       - name: Lint (Pint)
         run: vendor/bin/pint --test
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 26
           cache: npm
@@ -49,7 +49,7 @@ jobs:
     name: Serverscripts en compose
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Scripts die op de server draaien staan in git en worden hier minstens op syntax
       # nagekeken; shellcheck vangt de klassieke fouten (ongequote variabelen e.d.).
