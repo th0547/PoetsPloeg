@@ -13,9 +13,9 @@ class TaskTemplate extends Model
     use HasFactory;
 
     public const RECURRENCES = [
-        'weekly' => 'Wekelijks (of elke N weken)',
-        'monthly_nth_weekday' => 'Maandelijks op de N-de weekdag',
-        'monthly_day' => 'Maandelijks op vaste dag',
+        'weekly' => 'Wekelijks',
+        'monthly_nth_weekday' => 'Maandelijks op een weekdag',
+        'monthly_day' => 'Maandelijks op een vaste datum',
     ];
 
     protected $fillable = [
@@ -61,18 +61,30 @@ class TaskTemplate extends Model
         return $this->hasMany(Shift::class);
     }
 
-    /** Leesbare omschrijving van de herhaling, bijv. "Elke 2 weken op ma, wo". */
+    /** Leesbare omschrijving van de herhaling, bijv. "Om de week op ma, wo" of "Elk kwartaal op de eerste maandag". */
     public function recurrenceLabel(): string
     {
         $days = config('poetsploeg.weekdays_short');
         $every = max(1, (int) $this->repeat_every);
+        $weeks = match ($every) {
+            1 => 'Elke week',
+            2 => 'Om de week',
+            default => "Elke {$every} weken",
+        };
+        $months = match ($every) {
+            1 => 'Elke maand',
+            2 => 'Om de maand',
+            3 => 'Elk kwartaal',
+            6 => 'Elk half jaar',
+            12 => 'Elk jaar',
+            default => "Elke {$every} maanden",
+        };
+        $nth = [1 => 'eerste', 2 => 'tweede', 3 => 'derde', 4 => 'vierde', -1 => 'laatste'][$this->nth] ?? $this->nth.'e';
 
         return match ($this->recurrence) {
-            'weekly' => ($every === 1 ? 'Elke week' : "Elke {$every} weken").' op '
-                .collect($this->weekdays ?? [])->sort()->map(fn ($d) => $days[$d] ?? $d)->implode(', '),
-            'monthly_nth_weekday' => ($every === 1 ? 'Elke maand' : "Elke {$every} maanden").' op de '
-                .($this->nth === -1 ? 'laatste' : $this->nth.'e').' '.(config('poetsploeg.weekdays')[$this->weekday] ?? ''),
-            'monthly_day' => ($every === 1 ? 'Elke maand' : "Elke {$every} maanden").' op dag '.$this->day_of_month,
+            'weekly' => $weeks.' op '.collect($this->weekdays ?? [])->sort()->map(fn ($d) => $days[$d] ?? $d)->implode(', '),
+            'monthly_nth_weekday' => $months.' op de '.$nth.' '.(config('poetsploeg.weekdays')[$this->weekday] ?? ''),
+            'monthly_day' => $months.' op de '.$this->day_of_month.'e',
             default => $this->recurrence,
         };
     }

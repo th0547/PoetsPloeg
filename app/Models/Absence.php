@@ -7,17 +7,42 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Absence extends Model
 {
     use HasFactory;
 
+    // Verwijderen = intrekken: de registratie blijft bewaard voor de geschiedenis (deleted_at).
+    use SoftDeletes;
+
+    /**
+     * Soorten afwezigheid. De soort wordt vastgelegd omdat die bepaalt wat er wordt doorbetaald
+     * (bijv. huisarts wel, fysiotherapie niet).
+     */
     public const TYPES = [
         'verlof' => 'Verlof',
+        'verhuisdag' => 'Verhuisdag',
+        'calamiteit' => 'Calamiteitenverlof',
+        'bijzonder' => 'Bijzonder verlof',
+        'onbetaald' => 'Onbetaald verlof',
         'ziek' => 'Ziek',
+        'huisarts' => 'Huisarts',
+        'tandarts' => 'Tandarts',
+        'specialist' => 'Ziekenhuis / specialist',
+        'fysiotherapie' => 'Fysiotherapie',
         'overig' => 'Overig',
-        'verzoek' => 'Verlofverzoek',
     ];
+
+    /** Indeling van de keuzelijst. */
+    public const TYPE_GROUPS = [
+        'Verlof' => ['verlof', 'verhuisdag', 'calamiteit', 'bijzonder', 'onbetaald'],
+        'Ziekte en zorg' => ['ziek', 'huisarts', 'tandarts', 'specialist', 'fysiotherapie'],
+        'Anders' => ['overig'],
+    ];
+
+    /** Soorten die je niet vooraf aanvraagt: altijd direct registreren, nooit als verzoek. */
+    public const UNPLANNED = ['ziek', 'calamiteit'];
 
     public const STATUSES = [
         'approved' => 'Goedgekeurd',
@@ -73,6 +98,23 @@ class Absence extends Model
 
     public function typeLabel(): string
     {
-        return self::TYPES[$this->type] ?? $this->type;
+        return self::TYPES[$this->type] ?? ucfirst($this->type);
+    }
+
+    /** Titel voor een verzoek, bijv. "Verlofverzoek" of "Verzoek verhuisdag". */
+    public function requestLabel(): string
+    {
+        return $this->type === 'verlof' ? 'Verlofverzoek' : 'Verzoek '.mb_strtolower($this->typeLabel());
+    }
+
+    /** Kleur van het label in lijsten: ziek rood, zorgafspraken blauw, calamiteit oranje. */
+    public function chipClass(): string
+    {
+        return match (true) {
+            $this->type === 'ziek' => 'bg-red-100 text-red-800',
+            $this->type === 'calamiteit' => 'bg-orange-100 text-orange-800',
+            in_array($this->type, self::TYPE_GROUPS['Ziekte en zorg'], true) => 'bg-sky-100 text-sky-800',
+            default => '',
+        };
     }
 }

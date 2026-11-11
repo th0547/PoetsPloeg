@@ -76,6 +76,7 @@ class EmployeeController extends Controller
     private function form(Employee $employee): View
     {
         $employee->loadMissing(['skills', 'buildings', 'availabilityPatterns']);
+        $absences = $employee->exists ? $employee->absences()->get() : collect();
 
         return view('employees.form', [
             'employee' => $employee,
@@ -90,9 +91,16 @@ class EmployeeController extends Controller
                 'end_time' => substr($p->end_time, 0, 5),
                 'note' => $p->note,
             ])->values()->all()),
-            'absences' => $employee->exists
-                ? $employee->absences()->where('ends_at', '>=', now()->subDays(30))->get()
-                : collect(),
+            // Goedgekeurde afwezigheid voor het weekoverzicht: die gaat vóór het vaste patroon.
+            'absenceBlocks' => $absences->where('status', 'approved')->where('ends_at', '>=', now()->subWeeks(8))
+                ->map(fn ($a) => [
+                    'start' => $a->starts_at->format('Y-m-d\TH:i'),
+                    'end' => $a->ends_at->format('Y-m-d\TH:i'),
+                    'label' => mb_strtolower($a->typeLabel()),
+                ])->values()->all(),
+            // Lopende en geplande afwezigheid, en daaronder de volledige geschiedenis (nieuwste eerst).
+            'absences' => $absences->where('ends_at', '>=', now())->values(),
+            'absenceHistory' => $absences->where('ends_at', '<', now())->sortByDesc('starts_at')->values(),
         ]);
     }
 

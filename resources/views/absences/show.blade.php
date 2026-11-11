@@ -1,7 +1,7 @@
 <x-app-layout title="Afwezigheid">
     <x-slot name="header">
         <div>
-            <h1 class="page-title">{{ $absence->employee->name }} · {{ $absence->typeLabel() }}</h1>
+            <h1 class="page-title">{{ $absence->employee->name }} · <span class="chip align-middle text-sm {{ $absence->chipClass() }}">{{ $absence->typeLabel() }}</span></h1>
             <p class="text-sm text-gray-600">{{ $absence->starts_at->translatedFormat('l j F Y H:i') }} t/m {{ $absence->ends_at->translatedFormat('l j F Y H:i') }}</p>
             @if ($absence->note)<p class="text-sm text-gray-500">{{ $absence->note }}</p>@endif
         </div>
@@ -30,9 +30,9 @@
             </ul>
         </section>
 
-        <form method="POST" action="{{ route('absences.destroy', $absence) }}" onsubmit="return confirm('Deze afwezigheid verwijderen? Eerder vrijgemaakte diensten worden niet automatisch teruggezet.')">
+        <form method="POST" action="{{ route('absences.destroy', $absence) }}" onsubmit="return confirm('Deze afwezigheid intrekken? Eerder vrijgemaakte diensten worden niet automatisch teruggezet. De registratie blijft bewaard in de geschiedenis.')">
             @csrf @method('DELETE')
-            <button type="submit" class="btn-danger">Afwezigheid verwijderen</button>
+            <button type="submit" class="btn-danger">Afwezigheid intrekken</button>
         </form>
     </div>
 </x-app-layout>

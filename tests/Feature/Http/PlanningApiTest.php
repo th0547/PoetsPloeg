@@ -152,4 +152,17 @@ class PlanningApiTest extends TestCase
         $this->deleteJson("/api/shifts/{$shift->id}")->assertOk();
         $this->assertNotNull($shift->fresh()->cancelled_at);
     }
+
+    public function test_full_shift_accepts_extra_staff_above_required(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $shift = Shift::factory()->at('2026-12-01', '18:00', '20:00')->create(['required_staff' => 1]);
+        [$anna, $bram] = Employee::factory()->count(2)->create();
+        $shift->assignments()->create(['employee_id' => $anna->id]);
+
+        $this->getJson("/api/shifts/{$shift->id}")->assertJsonPath('open_slots', 0)->assertJsonPath('extra_staff', 0);
+        $this->postJson("/api/shifts/{$shift->id}/assignments", ['employee_id' => $bram->id, 'confirm' => true])
+            ->assertOk()->assertJsonPath('open_slots', 0)->assertJsonPath('extra_staff', 1);
+        $this->assertSame(2, $shift->assignments()->count());
+    }
 }

@@ -79,8 +79,17 @@ class Shift extends Model
 
     public function openSlots(): int
     {
-        $assigned = $this->relationLoaded('assignments') ? $this->assignments->count() : $this->assignments()->count();
+        return max(0, $this->required_staff - $this->assignedCount());
+    }
 
-        return max(0, $this->required_staff - $assigned);
+    /** Aantal medewerkers boven de bezetting (extra hulp of iemand die meekijkt). */
+    public function extraStaff(): int
+    {
+        return max(0, $this->assignedCount() - $this->required_staff);
+    }
+
+    private function assignedCount(): int
+    {
+        return $this->relationLoaded('assignments') ? $this->assignments->count() : $this->assignments()->count();
     }
 }

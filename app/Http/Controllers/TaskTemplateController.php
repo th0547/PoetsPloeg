@@ -6,7 +6,9 @@ use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Skill;
 use App\Models\TaskTemplate;
+use App\Services\DutchHolidays;
 use App\Services\ShiftGenerator;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +17,7 @@ use Illuminate\View\View;
 
 class TaskTemplateController extends Controller
 {
-    public function __construct(private ShiftGenerator $generator) {}
+    public function __construct(private ShiftGenerator $generator, private DutchHolidays $holidays) {}
 
     public function create(Building $building): View
     {
@@ -68,10 +70,27 @@ class TaskTemplateController extends Controller
     private function form(Building $building, TaskTemplate $template): View
     {
         $template->loadMissing(['skills', 'employees']);
+        $hasOld = session()->hasOldInput();
 
         return view('templates.form', [
             'building' => $building,
             'template' => $template,
+            // Beginstand van de herhalingskiezer (resources/js/recurrence.js).
+            'recurrence' => [
+                'recurrence' => old('recurrence', $template->recurrence),
+                'every' => (int) old('repeat_every', $template->repeat_every),
+                'weekdays' => array_map('intval', old('weekdays', $template->weekdays ?? [])),
+                'nth' => (int) old('nth', $template->nth ?? 1),
+                'weekday' => (int) old('weekday', $template->weekday ?? 1),
+                'dayOfMonth' => (int) old('day_of_month', $template->day_of_month ?? 1),
+                'validFrom' => old('valid_from', $template->valid_from?->toDateString()),
+                'validUntil' => old('valid_until', $template->valid_until?->toDateString()),
+                'skipHolidays' => $hasOld ? (bool) old('skip_holidays') : (bool) $template->skip_holidays,
+                // Feestdagen waarop niet wordt ingepland, voor de voorbeeldkalender.
+                'holidays' => collect($this->holidays->between(today()->startOfYear(), today()->addYears(3)->endOfYear()))
+                    ->filter(fn ($name, $date) => $this->holidays->isSkippable(CarbonImmutable::parse($date)))
+                    ->all(),
+            ],
             'skills' => Skill::orderBy('name')->get(),
             'employees' => Employee::where(fn ($q) => $q->where('active', true)->orWhereIn('id', $template->employees->pluck('id')))
                 ->orderBy('name')->get(),

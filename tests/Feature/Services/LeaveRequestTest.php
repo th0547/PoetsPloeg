@@ -34,10 +34,11 @@ class LeaveRequestTest extends TestCase
         }
     }
 
-    private function submit(): Absence
+    private function submit(string $type = 'verlof'): Absence
     {
         $this->post(route('absences.store'), [
-            'employee_id' => $this->anna->id, 'type' => 'verzoek', 'start_date' => '2026-10-20', 'end_date' => '2026-10-21',
+            'employee_id' => $this->anna->id, 'type' => $type, 'as_request' => '1',
+            'days' => [['date' => '2026-10-20'], ['date' => '2026-10-21']],
         ])->assertRedirect()->assertSessionHas('status', fn ($s) => str_contains($s, 'Verlofverzoek ingediend'));
 
         return Absence::first();
@@ -102,9 +103,50 @@ class LeaveRequestTest extends TestCase
     public function test_request_without_shifts_is_approved_immediately(): void
     {
         $this->post(route('absences.store'), [
-            'employee_id' => $this->anna->id, 'type' => 'verzoek', 'start_date' => '2026-11-02', 'end_date' => '2026-11-03',
+            'employee_id' => $this->anna->id, 'type' => 'verlof', 'as_request' => '1',
+            'days' => [['date' => '2026-11-02'], ['date' => '2026-11-03']],
         ])->assertSessionHas('status', fn ($s) => str_contains($s, 'direct goedgekeurd'));
 
         $this->assertSame('approved', Absence::first()->status);
+    }
+
+    public function test_request_keeps_its_leave_type_when_approved(): void
+    {
+        $absence = $this->submit('verhuisdag');
+        $this->assertSame('verhuisdag', $absence->type);
+        $this->get(route('absences.show', $absence))->assertOk()->assertSee('Verzoek verhuisdag');
+
+        [$bram, $cees] = Employee::factory()->count(2)->create();
+        foreach ([[$this->first, $bram], [$this->second, $cees]] as [$shift, $replacement]) {
+            $this->postJson("/api/shifts/{$shift->id}/assignments", [
+                'employee_id' => $replacement->id, 'replace_employee_id' => $this->anna->id, 'confirm' => true,
+            ])->assertOk();
+        }
+
+        $absence->refresh();
+        $this->assertSame('approved', $absence->status);
+        $this->assertSame('verhuisdag', $absence->type);
+    }
+
+    public function test_sickness_is_never_a_request(): void
+    {
+        $this->post(route('absences.store'), [
+            'employee_id' => $this->anna->id, 'type' => 'ziek', 'as_request' => '1',
+            'days' => [['date' => '2026-10-20']],
+        ])->assertRedirect();
+
+        $this->assertSame('approved', Absence::first()->status);
+        $this->assertSame(0, $this->first->assignments()->count());
+    }
+
+    public function test_withdrawn_request_no_longer_counts(): void
+    {
+        $absence = $this->submit();
+        $other = Shift::factory()->at('2026-10-20', '08:00', '10:00')->create();
+
+        $this->delete(route('absences.destroy', $absence))->assertRedirect();
+
+        $this->assertSoftDeleted($absence);
+        $this->assertNotContains('request', array_column(app(ConflictChecker::class)->forCandidate($other, $this->anna->id)['warnings'], 'type'));
     }
 }

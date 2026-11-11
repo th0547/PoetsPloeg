@@ -84,30 +84,96 @@
                 </div>
             </div>
 
-            <div class="card card-body space-y-3" x-data="availabilityEditor(@js($patterns))">
-                <div class="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                        <h2 class="font-semibold text-gray-800">Beschikbaarheid</h2>
-                        <p class="text-xs text-gray-500">
-                            Wanneer <strong class="text-teal-700">kan</strong> en wanneer <strong class="text-red-700">kan</strong> deze medewerker <strong class="text-red-700">niet</strong> werken (bijv. school 08:00–15:00)?
-                            “Kan niet” gaat altijd voor. Alleen “kan niet” ingevuld? Dan geldt de rest als beschikbaar.
-                        </p>
+            <div class="card card-body space-y-4" x-data="availabilityEditor(@js($patterns), @js($absenceBlocks))">
+                <div>
+                    <h2 class="font-semibold text-gray-800">Vaste beschikbaarheid <span class="chip ms-1 align-middle bg-teal-50 text-teal-800">↻ komt steeds terug</span></h2>
+                    <p class="text-xs text-gray-500">
+                        Het vaste weekpatroon: wanneer <strong class="text-teal-700">kan</strong> deze medewerker normaal gesproken wel, en wanneer <strong class="text-red-700">kan</strong> hij of zij <strong class="text-red-700">niet</strong> (bijv. school 08:00–15:00)?
+                    </p>
+                </div>
+
+                {{-- Vast patroon hier, eenmalige afwijkingen via afwezigheid --}}
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="rounded-md border border-teal-200 bg-teal-50/60 px-3 py-2 text-sm text-teal-900">
+                        <p class="font-semibold">↻ Hier: alleen wat steeds terugkomt</p>
+                        <p class="mt-0.5 text-xs">Bijvoorbeeld “elke maandag vanaf 17:00” of “om de week op vrijdag niet”. Dit geldt elke week opnieuw, tot je het aanpast.</p>
                     </div>
-                    <div class="inline-flex rounded-md shadow-sm" role="group" aria-label="Weergave">
-                        <button type="button" @click="view = 'list'" :class="view === 'list' ? 'bg-gray-800 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'"
-                                class="rounded-l-md border border-gray-300 px-3 py-1 text-xs font-medium">Lijst</button>
-                        <button type="button" @click="view = 'week'" :class="view === 'week' ? 'bg-gray-800 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'"
-                                class="-ml-px rounded-r-md border border-gray-300 px-3 py-1 text-xs font-medium">Weekkalender</button>
+                    <div class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                        <p class="font-semibold">Eenmalig anders? Gebruik afwezigheid</p>
+                        <p class="mt-0.5 text-xs">
+                            Vakantie, ziekte, een afspraak of één dag niet kunnen leg je vast als afwezigheid. <strong>Afwezigheid gaat altijd vóór</strong> op dit weekpatroon.
+                            @if ($employee->exists)
+                                <a href="{{ route('absences.create', ['medewerker' => $employee->id]) }}" class="font-medium underline hover:text-amber-700">Afwezigheid registreren ›</a>
+                            @endif
+                        </p>
                     </div>
                 </div>
 
-                {{-- Lijst: gesorteerd op dag en tijd bij openen en na opslaan; tijdens bewerken blijven regels op hun plek.
-                     De velden worden ook in de kalenderweergave meegestuurd. --}}
-                <div x-show="view === 'list'" class="space-y-2">
-                    <p x-show="!patterns.length" class="text-sm text-gray-500">Nog niets ingevuld (geen voorkeur).</p>
+                {{-- Weekoverzicht: per dag een tijdbalk --}}
+                <div class="space-y-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="inline-flex items-center gap-1">
+                            <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(-1)" aria-label="Vorige week">‹</button>
+                            <button type="button" class="btn-secondary btn-sm" @click="thisWeek()" :class="isThisWeek() ? 'bg-gray-100' : ''">Deze week</button>
+                            <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(1)" aria-label="Volgende week">›</button>
+                            <span class="ms-2 text-sm font-medium text-gray-700" x-text="weekLabel()"></span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 text-xs text-gray-600">
+                            <span class="inline-flex items-center gap-1"><span class="h-3 w-3 rounded-sm bg-teal-300 ring-1 ring-teal-500"></span>kan wel</span>
+                            <span class="inline-flex items-center gap-1"><span class="avail-blocked h-3 w-3 rounded-sm ring-1 ring-red-400"></span>kan niet</span>
+                            <span class="inline-flex items-center gap-1"><span class="avail-absent h-3 w-3 rounded-sm ring-1 ring-gray-400"></span>afwezig (gaat vóór)</span>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <div class="min-w-[36rem] text-xs">
+                            <div class="flex">
+                                <div class="w-24 shrink-0"></div>
+                                <div class="relative h-4 flex-1">
+                                    <template x-for="t in hourTicks()" :key="t.label">
+                                        <span class="absolute -translate-x-1/2 text-gray-400" :style="`left:${t.left}%`" x-text="t.label"></span>
+                                    </template>
+                                </div>
+                                <div class="w-8 shrink-0"></div>
+                            </div>
+                            <template x-for="d in days()" :key="d.toISOString()">
+                                <div class="flex items-center border-t border-gray-100 py-0.5">
+                                    <div class="w-24 shrink-0 pe-2 font-medium" :class="isToday(d) ? 'text-teal-700' : 'text-gray-700'" x-text="dayLabel(d)"></div>
+                                    <div class="relative h-7 flex-1 overflow-hidden rounded"
+                                         :class="{ 'bg-gray-100': restIs() === 'unavailable', 'bg-teal-50': restIs() === 'available', 'bg-gray-50': restIs() === 'none' }">
+                                        <template x-for="t in hourTicks()" :key="'g' + t.label">
+                                            <span class="absolute inset-y-0 w-px bg-white/80" :style="`left:${t.left}%`"></span>
+                                        </template>
+                                        <template x-for="b in blocks(d)" :key="b.index">
+                                            <button type="button" class="absolute inset-y-0.5 overflow-hidden whitespace-nowrap rounded px-1 text-left leading-6"
+                                                    :class="b.type === 'unavailable' ? 'avail-blocked z-10 text-red-900 ring-1 ring-red-400' : 'bg-teal-300 text-teal-950 ring-1 ring-teal-500'"
+                                                    :style="b.style" :title="b.title + ' – klik om te wijzigen'" x-text="b.label" @click="focus(b.index)"></button>
+                                        </template>
+                                        <template x-for="(a, ai) in absencesOn(d)" :key="'a' + ai">
+                                            <div class="avail-absent absolute inset-y-0 z-20 overflow-hidden whitespace-nowrap px-1 font-medium leading-7 text-gray-800 ring-1 ring-gray-400"
+                                                 :style="a.style" :title="a.label + ' – gaat vóór het weekpatroon'" x-text="a.label"></div>
+                                        </template>
+                                    </div>
+                                    <button type="button" class="ms-1 w-7 shrink-0 rounded text-base leading-6 text-gray-400 hover:bg-teal-50 hover:text-teal-700"
+                                            title="Tijdvak toevoegen op deze dag" aria-label="Tijdvak toevoegen op deze dag" @click="add('available', ((d.getDay() + 6) % 7) + 1)">+</button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500">
+                        <span x-show="restIs() === 'none'">Nog niets ingevuld: de medewerker geldt op alle tijden als beschikbaar (geen voorkeur).</span>
+                        <span x-show="restIs() === 'available'" x-cloak>Buiten de rode blokken geldt de medewerker als beschikbaar.</span>
+                        <span x-show="restIs() === 'unavailable'" x-cloak>Buiten de groene blokken (grijs) geldt de medewerker als niet beschikbaar. Rood (“kan niet”) gaat altijd vóór groen.</span>
+                        <span x-show="weekHasAbsence()" x-cloak>In deze week staat afwezigheid: die gaat vóór het patroon.</span>
+                    </p>
+                </div>
+
+                {{-- Tijdvakken: gesorteerd op dag en tijd bij openen en na opslaan; tijdens bewerken blijven regels op hun plek. --}}
+                <div class="space-y-2">
+                    <h3 class="text-sm font-semibold text-gray-800">Tijdvakken</h3>
+                    <p x-show="!patterns.length" class="text-sm text-gray-500">Nog geen tijdvakken. Voeg hieronder toe wat elke week terugkomt.</p>
                     <template x-for="(p, i) in patterns" :key="i">
-                        <div class="flex flex-wrap items-center gap-2 rounded-md border-l-4 px-2 py-1.5"
-                             :class="p.type === 'unavailable' ? 'border-red-400 bg-red-50/60' : 'border-teal-400 bg-teal-50/40'">
+                        <div class="flex flex-wrap items-center gap-2 rounded-md border-l-4 px-2 py-1.5 transition-shadow" :data-pattern="i"
+                             :class="[p.type === 'unavailable' ? 'border-red-400 bg-red-50/60' : 'border-teal-400 bg-teal-50/40', highlight === i ? 'ring-2 ring-teal-500' : '']">
                             <select :name="`patterns[${i}][type]`" x-model="p.type" aria-label="Kan wel of kan niet"
                                     class="rounded-md border-gray-300 py-1 text-sm font-medium shadow-sm" :class="p.type === 'unavailable' ? 'text-red-700' : 'text-teal-700'">
                                 @foreach (\App\Models\AvailabilityPattern::TYPES as $value => $label)
@@ -151,47 +217,7 @@
                             Laatste regel kopiëren naar ma t/m vr
                         </button>
                     </div>
-                    <p class="text-xs text-gray-500">Herhaling “om de week”, “om de 3 weken” of “om de dag” telt vanaf de gekozen startdatum.</p>
-                </div>
-
-                {{-- Weekkalender: zelfde gegevens, per week bekeken --}}
-                <div x-show="view === 'week'" x-cloak class="space-y-2">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div class="inline-flex items-center gap-1">
-                            <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(-1)" aria-label="Vorige week">‹</button>
-                            <button type="button" class="btn-secondary btn-sm" @click="thisWeek()">Deze week</button>
-                            <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(1)" aria-label="Volgende week">›</button>
-                            <span class="ms-2 text-sm font-medium text-gray-700" x-text="weekLabel()"></span>
-                        </div>
-                        <div class="flex items-center gap-3 text-xs text-gray-600">
-                            <span class="inline-flex items-center gap-1"><span class="h-3 w-3 rounded-sm bg-teal-200 ring-1 ring-teal-400"></span>kan wel</span>
-                            <span class="inline-flex items-center gap-1"><span class="avail-blocked h-3 w-3 rounded-sm ring-1 ring-red-400"></span>kan niet</span>
-                        </div>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <div class="grid min-w-[40rem] grid-cols-[3rem_repeat(7,minmax(0,1fr))] text-xs">
-                            <div></div>
-                            <template x-for="d in days()" :key="d.toISOString()">
-                                <div class="border-b px-1 pb-1 text-center font-medium text-gray-700" x-text="dayLabel(d)"></div>
-                            </template>
-                            <div class="relative" :style="`height:${hourLabels().length * 1.75}rem`">
-                                <template x-for="(h, i) in hourLabels()" :key="h">
-                                    <div class="absolute right-1 -translate-y-1/2 text-gray-400" :style="`top:${(i / hourLabels().length) * 100}%`" x-text="String(h).padStart(2, '0') + ':00'"></div>
-                                </template>
-                            </div>
-                            <template x-for="d in days()" :key="'c' + d.toISOString()">
-                                <div class="relative border-l border-gray-100 bg-[linear-gradient(to_bottom,#f3f4f6_1px,transparent_1px)]"
-                                     :style="`background-size:100% 1.75rem;height:${hourLabels().length * 1.75}rem`">
-                                    <template x-for="(b, j) in blocks(d)" :key="j">
-                                        <div class="absolute overflow-hidden rounded px-1 py-0.5 leading-tight"
-                                             :class="b.type === 'unavailable' ? 'avail-blocked inset-x-0.5 z-10 text-red-800 ring-1 ring-red-400' : 'inset-x-1.5 bg-teal-100 text-teal-900 ring-1 ring-teal-300'"
-                                             :style="b.style" :title="(b.type === 'unavailable' ? 'Kan niet ' : 'Kan wel ') + b.label" x-text="b.label"></div>
-                                    </template>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                    <p class="text-xs text-gray-500">Wijzigen doe je in de lijst; de kalender laat zien wat er per week geldt.</p>
+                    <p class="text-xs text-gray-500">Herhaling “om de week”, “om de 3 weken” of “om de dag” telt vanaf de gekozen startdatum; blader hierboven door de weken om te zien wanneer het geldt.</p>
                 </div>
             </div>
 
@@ -207,21 +233,42 @@
                         <h2 class="font-semibold text-gray-800">Verlof &amp; afwezigheid</h2>
                         <a href="{{ route('absences.create', ['medewerker' => $employee->id]) }}" class="text-sm text-teal-700 hover:underline">+ Toevoegen</a>
                     </div>
-                    <ul class="divide-y text-sm">
-                        @forelse ($absences as $absence)
-                            <li class="py-2">
-                                <a href="{{ route('absences.show', $absence) }}" class="hover:text-teal-700">
-                                    <span class="chip {{ $absence->type === 'ziek' ? 'bg-red-100 text-red-800' : '' }}">{{ $absence->typeLabel() }}</span>
-                                    @if ($absence->status !== 'approved')<span class="chip {{ $absence->isPending() ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800' }}">{{ $absence->isPending() ? 'in afwachting' : 'afgewezen' }}</span>@endif
-                                    @if ($absence->status !== 'approved')<span class="chip {{ $absence->isPending() ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800' }}">{{ $absence->isPending() ? 'in afwachting' : 'afgewezen' }}</span>@endif
-                                    {{ $absence->starts_at->format('d-m-Y H:i') }} t/m {{ $absence->ends_at->format('d-m-Y H:i') }}
-                                </a>
-                                @if ($absence->note)<p class="text-xs text-gray-500">{{ $absence->note }}</p>@endif
-                            </li>
-                        @empty
-                            <li class="py-2 text-gray-500">Geen recente of geplande afwezigheid.</li>
-                        @endforelse
-                    </ul>
+
+                    <div>
+                        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Nu en gepland</h3>
+                        <ul class="divide-y text-sm">
+                            @forelse ($absences as $absence)
+                                @include('employees.partials.absence-row')
+                            @empty
+                                <li class="py-2 text-gray-500">Geen lopende of geplande afwezigheid.</li>
+                            @endforelse
+                        </ul>
+                    </div>
+
+                    {{-- De geschiedenis blijft altijd bewaard en is hier volledig terug te vinden. --}}
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Geschiedenis ({{ $absenceHistory->count() }})</h3>
+                            <a href="{{ route('absences.index', ['medewerker' => $employee->id, 'periode' => 'alles']) }}" class="text-xs text-teal-700 hover:underline">Alles bekijken en filteren ›</a>
+                        </div>
+                        @if ($absenceHistory->isEmpty())
+                            <p class="py-2 text-sm text-gray-500">Nog geen eerdere afwezigheid.</p>
+                        @else
+                            <div class="mt-1 flex flex-wrap gap-1">
+                                @foreach ($absenceHistory->where('status', 'approved')->groupBy('type') as $type => $items)
+                                    <span class="chip {{ $items->first()->chipClass() }}" title="Aantal registraties in de geschiedenis">{{ $items->first()->typeLabel() }} {{ $items->count() }}×</span>
+                                @endforeach
+                            </div>
+                            <ul class="mt-1 max-h-96 divide-y overflow-y-auto text-sm">
+                                @foreach ($absenceHistory->groupBy(fn ($a) => $a->starts_at->year) as $year => $items)
+                                    <li class="sticky top-0 bg-white py-1 text-xs font-semibold text-gray-500">{{ $year }}</li>
+                                    @foreach ($items as $absence)
+                                        @include('employees.partials.absence-row')
+                                    @endforeach
+                                @endforeach
+                            </ul>
+                        @endif
+                    </div>
                 </div>
 
                 <div class="card card-body space-y-2">
@@ -229,7 +276,7 @@
                     <a href="{{ route('planning', ['view' => 'employee', 'range' => 'week']) }}" class="text-sm text-teal-700 hover:underline">Bekijk in de weekplanning</a>
                 </div>
 
-                <form method="POST" action="{{ route('employees.destroy', $employee) }}" onsubmit="return confirm('Medewerker definitief verwijderen? Alle toewijzingen verdwijnen ook. Tip: zet de medewerker liever op inactief.')">
+                <form method="POST" action="{{ route('employees.destroy', $employee) }}" onsubmit="return confirm('Medewerker definitief verwijderen? Alle toewijzingen én de verlof- en afwezigheidsgeschiedenis verdwijnen ook. Tip: zet de medewerker liever op inactief, dan blijft alles bewaard.')">
                     @csrf @method('DELETE')
                     <button type="submit" class="btn-danger w-full">Medewerker verwijderen</button>
                 </form>

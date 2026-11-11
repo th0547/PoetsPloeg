@@ -7,7 +7,7 @@
     <x-slot name="header">
         <div>
             <h1 class="page-title">
-                {{ $absence->employee->name }} · {{ $absence->status === 'approved' ? 'Verlof' : 'Verlofverzoek' }}
+                {{ $absence->employee->name }} · {{ $absence->status === 'approved' ? $absence->typeLabel() : $absence->requestLabel() }}
                 <span class="chip ms-1 align-middle {{ ['pending' => 'bg-amber-100 text-amber-800', 'approved' => 'bg-teal-100 text-teal-800', 'rejected' => 'bg-red-100 text-red-800'][$absence->status] }}">{{ $absence->statusLabel() }}</span>
             </h1>
             <p class="text-sm text-gray-600">{{ $absence->starts_at->translatedFormat('l j F Y H:i') }} t/m {{ $absence->ends_at->translatedFormat('l j F Y H:i') }}</p>
@@ -80,9 +80,9 @@
                     <button type="submit" class="btn-danger">Verzoek afwijzen</button>
                 </form>
             @endif
-            <form method="POST" action="{{ route('absences.destroy', $absence) }}" onsubmit="return confirm('Verwijderen? Al ingeplande vervangers blijven staan.')">
+            <form method="POST" action="{{ route('absences.destroy', $absence) }}" onsubmit="return confirm('Intrekken? Al ingeplande vervangers blijven staan. De registratie blijft bewaard in de geschiedenis.')">
                 @csrf @method('DELETE')
-                <button type="submit" class="btn-secondary">Verwijderen</button>
+                <button type="submit" class="btn-secondary">Intrekken</button>
             </form>
         </div>
     </div>

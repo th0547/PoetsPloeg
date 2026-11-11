@@ -69,6 +69,9 @@
                                             @if ($shift->openSlots() > 0)
                                                 <span class="chip bg-orange-100 text-orange-800">{{ $shift->openSlots() }} open</span>
                                             @endif
+                                            @if ($shift->extraStaff() > 0)
+                                                <span class="chip bg-sky-100 text-sky-800" title="Meer mensen ingepland dan de bezetting vraagt">+{{ $shift->extraStaff() }} extra</span>
+                                            @endif
                                         </div>
                                     </div>
                                 </li>
@@ -121,7 +124,7 @@
                             @forelse ($absentToday as $absence)
                                 <li class="px-4 py-2 text-sm">
                                     <a href="{{ route('absences.show', $absence) }}" class="font-medium hover:text-teal-700">{{ $absence->employee->name }}</a>
-                                    <span class="chip ms-1 {{ $absence->type === 'ziek' ? 'bg-red-100 text-red-800' : '' }}">{{ $absence->typeLabel() }}</span>
+                                    <span class="chip ms-1 {{ $absence->chipClass() }}">{{ $absence->typeLabel() }}</span>
                                     <p class="text-xs text-gray-500">t/m {{ $absence->ends_at->translatedFormat('D j M H:i') }}</p>
                                 </li>
                             @empty

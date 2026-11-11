@@ -10,9 +10,9 @@ use Illuminate\Support\Facades\DB;
 /**
  * Verwerkt verlof, uitval en verlofverzoeken.
  *
- * - Verlof/ziek/overig: de medewerker wordt direct van getroffen diensten gehaald.
- * - Verlofverzoek: de medewerker blijft ingepland tot er per dienst een vervanger is gevonden;
- *   zodra alle diensten vervangen zijn, wordt het verzoek automatisch goedgekeurd (en wordt het verlof).
+ * - Direct geregistreerd (ziek, verlof, huisarts, ...): de medewerker wordt direct van getroffen diensten gehaald.
+ * - Als verzoek ingediend: de medewerker blijft ingepland tot er per dienst een vervanger is gevonden;
+ *   zodra alle diensten vervangen zijn, wordt het verzoek automatisch goedgekeurd.
  */
 class AbsenceService
 {
@@ -105,7 +105,8 @@ class AbsenceService
             return false;
         }
 
-        $absence->update(['status' => 'approved', 'type' => 'verlof', 'decided_at' => now()]);
+        // De soort (verlof, verhuisdag, huisarts, ...) blijft staan: die is nodig voor de administratie.
+        $absence->update(['status' => 'approved', 'decided_at' => now()]);
         // Voor de zekerheid: de medewerker van eventuele overige diensten in de periode halen.
         $this->apply($absence);
 

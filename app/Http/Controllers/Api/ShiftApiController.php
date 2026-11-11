@@ -96,6 +96,7 @@ class ShiftApiController extends Controller
             return response()->json(['message' => 'De te vervangen medewerker staat niet (meer) op deze dienst.'], 422);
         }
 
+        // Bewust geen grens op de bezetting: bij een volle dienst mag er iemand extra bij (hulp of meekijken).
         $result = $this->checker->forCandidate($shift, $employeeId);
         if (Planning::needsConfirmation($result['warnings']) && ! ($data['confirm'] ?? false)) {
             return response()->json(['needs_confirmation' => true, 'warnings' => $result['warnings']]);
@@ -139,6 +140,7 @@ class ShiftApiController extends Controller
             'duration' => Planning::hours($shift->durationHours()),
             'required_staff' => $shift->required_staff,
             'open_slots' => $shift->openSlots(),
+            'extra_staff' => $shift->extraStaff(),
             'notes' => $shift->notes,
             'is_modified' => $shift->is_modified,
             'cancelled' => $shift->cancelled_at !== null,
