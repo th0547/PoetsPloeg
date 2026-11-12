@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\RecurrenceAiPrompt;
 use Illuminate\View\View;
 
 /** Hulppagina's voor gevorderde functies. */
@@ -24,6 +25,10 @@ class HelpController extends Controller
 
     public function recurrence(): View
     {
-        return view('help.recurrence', ['examples' => self::RECURRENCE_EXAMPLES]);
+        return view('help.recurrence', [
+            'examples' => self::RECURRENCE_EXAMPLES,
+            'aiPrompt' => RecurrenceAiPrompt::base(),
+            'aiMaxWish' => RecurrenceAiPrompt::MAX_WISH,
+        ]);
     }
 }

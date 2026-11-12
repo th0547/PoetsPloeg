@@ -512,3 +512,35 @@ export function recurrencePlayground(initial = {}) {
         },
     };
 }
+
+/**
+ * Knoppen op de hulppagina om een AI-assistent een code te laten schrijven (issue #39).
+ * De vaste vraag komt van de server (RecurrenceAiPrompt), de wens van de gebruiker wordt erachter gezet.
+ */
+export function aiPrompt(initial = {}) {
+    return {
+        base: initial.base || '',
+        max: Number(initial.max) || 400,
+        wish: '',
+        copied: false,
+
+        prompt() {
+            const wish = this.wish.trim().slice(0, this.max);
+            return `${this.base}\n\nWat ik wil: ${wish || '(nog niet ingevuld; vraag mij wat ik wil)'}`;
+        },
+
+        url(prefix) {
+            return prefix + encodeURIComponent(this.prompt());
+        },
+
+        async copy() {
+            try {
+                await navigator.clipboard.writeText(this.prompt());
+                this.copied = true;
+                setTimeout(() => { this.copied = false; }, 2000);
+            } catch {
+                this.copied = false;
+            }
+        },
+    };
+}

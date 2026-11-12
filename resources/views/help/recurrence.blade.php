@@ -44,6 +44,26 @@
             <p>Zonder <span class="font-mono">BYDAY</span> of <span class="font-mono">BYMONTHDAY</span> neemt de code de dag van “Telt vanaf”: <span class="font-mono">FREQ=MONTHLY</span> vanaf 15 januari is elke 15e. Daarnaast gelden altijd de periode (Vanaf en Tot en met) en “Niet op feestdagen” van de taak.</p>
         </section>
 
+        {{-- Laat een AI-assistent de code schrijven (issue #39). De vraag bevat alleen de uitleg hieronder en wat je zelf typt. --}}
+        <section class="card card-body space-y-3" x-data="aiPrompt(@js(['base' => $aiPrompt, 'max' => $aiMaxWish]))">
+            <h2 class="text-base font-semibold text-gray-900">Laat een AI-assistent de code schrijven</h2>
+            <p>Beschrijf in gewone taal wat je wilt. De knop opent Claude of ChatGPT met een kant-en-klare vraag, met de regels van deze pagina erin. Plak de code die je terugkrijgt bij <strong>Aangepast (code)</strong>; het voorbeeld laat meteen zien of hij klopt.</p>
+            <div>
+                <label class="label" for="ai-wish">Wat wil je?</label>
+                <textarea id="ai-wish" class="input" rows="2" x-model="wish" :maxlength="max" placeholder="Bijv. de tweede en vierde dinsdag van de maand, behalve in juli en augustus"></textarea>
+                <p class="mt-1 text-xs text-gray-500">Je vraag gaat naar de AI-dienst die je kiest. Zet er geen namen, adressen of andere persoonsgegevens in.</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a class="btn" :href="url('https://claude.ai/new?q=')" target="_blank" rel="noopener noreferrer">Open in Claude</a>
+                <a class="btn-secondary" :href="url('https://chatgpt.com/?q=')" target="_blank" rel="noopener noreferrer">Open in ChatGPT</a>
+                <button type="button" class="btn-secondary" @click="copy()" x-text="copied ? 'Gekopieerd' : 'Vraag kopiëren'">Vraag kopiëren</button>
+            </div>
+            <details class="text-xs text-gray-500">
+                <summary class="cursor-pointer">Welke vraag wordt er gestuurd?</summary>
+                <pre class="mt-2 whitespace-pre-wrap rounded bg-gray-50 p-2 font-mono" x-text="prompt()"></pre>
+            </details>
+        </section>
+
         <section class="card card-body space-y-3" id="proberen">
             <h2 class="text-base font-semibold text-gray-900">Proberen</h2>
             <div class="grid gap-3 sm:grid-cols-3">
