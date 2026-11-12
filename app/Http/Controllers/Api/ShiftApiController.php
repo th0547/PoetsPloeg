@@ -128,7 +128,7 @@ class ShiftApiController extends Controller
 
     private function present(Shift $shift): array
     {
-        $shift->load(['building', 'template', 'skills:id,name', 'assignments.employee:id,name,phone,color']);
+        $shift->load(['building', 'template', 'pattern', 'skills:id,name', 'assignments.employee:id,name,phone,color']);
         $warnings = $this->checker->forShifts(collect([$shift]))[$shift->id] ?? [];
         $contact = Gate::allows('view-contact-details');
 
@@ -148,7 +148,8 @@ class ShiftApiController extends Controller
             'cancelled' => $shift->cancelled_at !== null,
             'template' => $shift->template ? [
                 'id' => $shift->template->id,
-                'recurrence' => $shift->template->recurrenceLabel(),
+                // Het patroon van deze dienst; bij oudere diensten (zonder patroon) alle patronen van de taak.
+                'recurrence' => $shift->pattern?->label() ?? $shift->template->recurrenceLabel(),
                 'url' => route('buildings.templates.edit', [$shift->building_id, $shift->template->id]),
             ] : null,
             'skills' => $shift->skills->map(fn ($s) => ['id' => $s->id, 'name' => $s->name])->values(),

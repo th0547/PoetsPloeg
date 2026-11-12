@@ -21,7 +21,7 @@ class PlanningApiTest extends TestCase
 
     public function test_timeline_generates_shifts_and_returns_groups_and_items(): void
     {
-        $template = TaskTemplate::factory()->create(['weekdays' => [1, 3, 5], 'required_staff' => 2]);
+        $template = TaskTemplate::factory()->weekly([1, 3, 5])->create(['required_staff' => 2]);
         $employee = Employee::factory()->create();
         $template->employees()->attach($employee);
 
@@ -39,7 +39,7 @@ class PlanningApiTest extends TestCase
 
     public function test_calendar_returns_events(): void
     {
-        TaskTemplate::factory()->create(['weekdays' => [5]]);
+        TaskTemplate::factory()->weekly([5])->create();
 
         $events = $this->getJson('/api/calendar?start=2026-12-01&end=2027-01-01')->assertOk()->json();
 

@@ -88,9 +88,9 @@ class DemoSeeder extends Seeder
                 'building_id' => $building->id, 'name' => 'Dagelijkse schoonmaak',
                 'description' => 'Stofzuigen, sanitair, pantry, prullenbakken legen.',
                 'start_time' => $start, 'end_time' => $end, 'required_staff' => $staff,
-                'recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => $days,
                 'valid_from' => $validFrom, 'skip_holidays' => true, 'active' => true,
             ]);
+            $daily->patterns()->create(['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => $days]);
             $daily->skills()->attach([$skills['Algemeen']->id, $skills['Sanitair']->id]);
             $daily->load('skills');
             $this->assignFixed($daily, $employees, $building, $days, $start, $end, $staff);
@@ -99,9 +99,9 @@ class DemoSeeder extends Seeder
                 $glass = TaskTemplate::create([
                     'building_id' => $building->id, 'name' => 'Glasbewassing',
                     'start_time' => '08:00', 'end_time' => '12:00', 'required_staff' => 1,
-                    'recurrence' => 'weekly', 'repeat_every' => 4, 'weekdays' => [($i % 5) + 1],
                     'valid_from' => $validFrom->addDays($i % 14), 'skip_holidays' => true, 'active' => true,
                 ]);
+                $glass->patterns()->create(['recurrence' => 'weekly', 'repeat_every' => 4, 'weekdays' => [($i % 5) + 1]]);
                 $glass->skills()->attach($skills['Glasbewassing']->id);
             }
 
@@ -109,12 +109,26 @@ class DemoSeeder extends Seeder
                 $floor = TaskTemplate::create([
                     'building_id' => $building->id, 'name' => 'Vloeronderhoud (periodiek)',
                     'start_time' => '09:00', 'end_time' => '13:00', 'required_staff' => 2,
-                    'recurrence' => 'monthly_nth_weekday', 'repeat_every' => 1, 'nth' => ($i % 4) + 1, 'weekday' => 6,
                     'valid_from' => $validFrom, 'skip_holidays' => true, 'active' => true,
                 ]);
+                $floor->patterns()->create(['recurrence' => 'monthly_nth_weekday', 'repeat_every' => 1, 'nth' => ($i % 4) + 1, 'weekday' => 6]);
                 $floor->skills()->attach($skills['Vloeronderhoud']->id);
             }
         }
+
+        // Voorbeeld van meerdere patronen: de ene week donderdag, de week erop maandag (vroeg).
+        $alternating = TaskTemplate::create([
+            'building_id' => $buildings[0]->id, 'name' => 'Archief en magazijn',
+            'description' => 'Wisselend schema: week A donderdagavond, week B maandagochtend.',
+            'start_time' => '18:00', 'end_time' => '20:00', 'required_staff' => 1,
+            'valid_from' => $validFrom, 'skip_holidays' => true, 'active' => true,
+        ]);
+        $alternating->patterns()->create(['position' => 0, 'recurrence' => 'weekly', 'repeat_every' => 2, 'weekdays' => [4], 'starts_on' => $validFrom]);
+        $alternating->patterns()->create([
+            'position' => 1, 'recurrence' => 'weekly', 'repeat_every' => 2, 'weekdays' => [1],
+            'starts_on' => $validFrom->addWeek(), 'start_time' => '07:00', 'end_time' => '09:00',
+        ]);
+        $alternating->patterns()->create(['position' => 2, 'recurrence' => 'rrule', 'rrule' => 'FREQ=MONTHLY;BYDAY=-1FR', 'starts_on' => $validFrom]);
 
         // Wat verlof en een zieke medewerker.
         $today = CarbonImmutable::today();

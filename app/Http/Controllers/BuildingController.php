@@ -43,7 +43,7 @@ class BuildingController extends Controller
 
     public function show(Request $request, Building $building, ShiftGenerator $generator, DutchHolidays $holidays): View
     {
-        $building->load(['taskTemplates.skills', 'taskTemplates.employees', 'employees']);
+        $building->load(['taskTemplates.skills', 'taskTemplates.employees', 'taskTemplates.patterns', 'employees']);
 
         // Weekrooster: maandag t/m zondag van de gekozen week.
         $weekStart = rescue(fn () => CarbonImmutable::parse($request->query('week', 'today')), CarbonImmutable::today(), false)

@@ -14,7 +14,7 @@ class Shift extends Model
     use HasFactory;
 
     protected $fillable = [
-        'building_id', 'task_template_id', 'date', 'starts_at', 'ends_at', 'required_staff', 'title', 'notes',
+        'building_id', 'task_template_id', 'task_template_pattern_id', 'date', 'starts_at', 'ends_at', 'required_staff', 'title', 'notes',
         'is_modified', 'cancelled_at',
     ];
 
@@ -50,6 +50,11 @@ class Shift extends Model
     public function building(): BelongsTo
     {
         return $this->belongsTo(Building::class);
+    }
+
+    public function pattern(): BelongsTo
+    {
+        return $this->belongsTo(TaskTemplatePattern::class, 'task_template_pattern_id');
     }
 
     public function template(): BelongsTo
