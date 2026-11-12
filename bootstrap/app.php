@@ -3,6 +3,7 @@
 use App\Http\Middleware\ContentSecurityPolicy;
 use App\Http\Middleware\EnsureCanPlan;
 use App\Http\Middleware\EnsureIsEmployee;
+use App\Http\Middleware\EnsureTwoFactor;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,7 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias(['planner' => EnsureCanPlan::class, 'employee' => EnsureIsEmployee::class]);
-        $middleware->web(append: [ContentSecurityPolicy::class]);
+        $middleware->web(append: [ContentSecurityPolicy::class, EnsureTwoFactor::class]);
 
         // Achter een https-proxy (Codespaces, Docker) de juiste host en https-links gebruiken.
         // Op de VPS leeg laten: daar staat nginx direct aan de buitenkant.

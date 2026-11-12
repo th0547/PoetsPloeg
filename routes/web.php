@@ -18,6 +18,7 @@ use App\Http\Controllers\SecurityTxtController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SkillController;
 use App\Http\Controllers\TaskTemplateController;
+use App\Http\Controllers\TwoFactorResetController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -59,6 +60,11 @@ Route::middleware(['auth', 'planner'])->group(function () {
 
     Route::resource('vaardigheden', SkillController::class)
         ->parameters(['vaardigheden' => 'skill'])->names('skills')->only(['index', 'store', 'update', 'destroy']);
+
+    Route::post('gebruikers/{user}/tweestapsverificatie-reset', [TwoFactorResetController::class, 'user'])
+        ->middleware('can:reset-two-factor')->name('users.two-factor.reset');
+    Route::post('medewerkers/{employee}/tweestapsverificatie-reset', [TwoFactorResetController::class, 'employee'])
+        ->middleware('can:reset-two-factor')->name('employees.two-factor.reset');
 
     Route::resource('gebruikers', UserController::class)
         ->parameters(['gebruikers' => 'user'])->names('users')->except('show');

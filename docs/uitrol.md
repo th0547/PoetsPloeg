@@ -129,6 +129,14 @@ Na de eerste uitrol je eigen planner-account aanmaken (SSH-sessie; `thomas` zit 
 docker exec -it poetsploeg-app-1 php artisan poetsploeg:create-planner
 ```
 
+Bij de eerste keer inloggen vraagt PoetsPloeg om tweestapsverificatie in te stellen (verplicht voor
+planners en teamleiders). Kan niemand meer inloggen omdat een telefoon kwijt is en er geen
+herstelcodes zijn, dan kan het op de server:
+
+```bash
+docker exec poetsploeg-app-1 php artisan poetsploeg:reset-2fa naam@voorbeeld.nl
+```
+
 Gebruik op productie **nooit** `--seed`: dat zet demodata en demo-accounts in de database.
 
 ## Uitgaande mail (Brevo)

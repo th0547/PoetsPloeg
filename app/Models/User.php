@@ -48,6 +48,8 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
 
     /**
@@ -60,6 +62,10 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'two_factor_secret' => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'two_factor_confirmed_at' => 'datetime',
+            'two_factor_last_step' => 'integer',
         ];
     }
 
@@ -84,6 +90,24 @@ class User extends Authenticatable
     public function invitationPending(): bool
     {
         return $this->isEmployee() && $this->email_verified_at === null;
+    }
+
+    /** Tweestapsverificatie ingesteld en bevestigd. */
+    public function hasTwoFactor(): bool
+    {
+        return $this->two_factor_confirmed_at !== null && $this->two_factor_secret !== null;
+    }
+
+    /** Verplicht voor wie alle persoonsgegevens ziet (planner, teamleider); zie config poetsploeg.two_factor_required. */
+    public function requiresTwoFactor(): bool
+    {
+        return (bool) config('poetsploeg.two_factor_required') && $this->canPlan();
+    }
+
+    /** Aantal herstelcodes dat nog over is. */
+    public function recoveryCodesLeft(): int
+    {
+        return count($this->two_factor_recovery_codes ?? []);
     }
 
     /** Waar iemand na het inloggen begint. */

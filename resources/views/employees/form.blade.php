@@ -82,6 +82,11 @@
                         <span><strong>Kan inloggen</strong> met {{ $account->email }}@unless ($employee->active) <span class="text-amber-800">(niet zolang de medewerker inactief is)</span>@endunless.</span>
                         <span class="flex gap-3">
                             <button type="submit" form="resend-invitation" class="text-sm text-teal-700 hover:underline" title="Stuurt een link om een nieuw wachtwoord in te stellen">Nieuwe link sturen</button>
+                            @if ($account->hasTwoFactor())
+                                @can('reset-two-factor')
+                                    <button type="submit" form="reset-two-factor" class="text-sm text-amber-700 hover:underline">2FA resetten</button>
+                                @endcan
+                            @endif
                             <button type="submit" form="revoke-account" class="text-sm text-red-600 hover:underline">Inlog intrekken</button>
                         </span>
                     </div>
@@ -182,6 +187,10 @@
                     <a href="{{ route('planning', ['view' => 'employee', 'range' => 'week']) }}" class="text-sm text-teal-700 hover:underline">Bekijk in de weekplanning</a>
                 </div>
 
+                @if ($employee->user?->hasTwoFactor())
+                    <form id="reset-two-factor" method="POST" action="{{ route('employees.two-factor.reset', $employee) }}" class="hidden"
+                          data-confirm="Tweestapsverificatie van {{ $employee->name }} resetten?">@csrf</form>
+                @endif
                 @if ($employee->user)
                     <form id="resend-invitation" method="POST" action="{{ route('employees.invitation', $employee) }}" class="hidden">@csrf</form>
                     <form id="revoke-account" method="POST" action="{{ route('employees.account.destroy', $employee) }}" class="hidden"

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -33,16 +34,25 @@ class LoginRequest extends FormRequest
         ];
     }
 
+    /** Sessiesleutel voor iemand die het wachtwoord goed had en nog de code uit de app moet invullen. */
+    public const TWO_FACTOR_SESSION = 'login.two_factor';
+
     /**
-     * Attempt to authenticate the request's credentials.
+     * Controleer e-mail en wachtwoord. Zonder tweestapsverificatie wordt de gebruiker ingelogd;
+     * met tweestapsverificatie nog niet: dan komt de code-stap (TwoFactorChallengeController).
+     *
+     * @return bool true als de code-stap nog moet volgen
      *
      * @throws ValidationException
      */
-    public function authenticate(): void
+    public function authenticate(): bool
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        $guard = Auth::guard('web');
+        $credentials = $this->only('email', 'password');
+        if (! $guard->validate($credentials)) {
+            event(new Failed('web', $guard->getLastAttempted(), $credentials));
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -51,16 +61,28 @@ class LoginRequest extends FormRequest
         }
 
         // Een medewerker-account werkt alleen zolang de medewerker actief is.
-        $user = Auth::user();
+        $user = $guard->getLastAttempted();
         if ($user->isEmployee() && ! $user->employee?->active) {
-            Auth::guard('web')->logout();
-
             throw ValidationException::withMessages([
                 'email' => 'Je account is niet actief. Neem contact op met je teamleider.',
             ]);
         }
 
         RateLimiter::clear($this->throttleKey());
+
+        if ($user->hasTwoFactor()) {
+            $this->session()->put(self::TWO_FACTOR_SESSION, [
+                'id' => $user->getKey(),
+                'remember' => $this->boolean('remember'),
+                'expires' => now()->addMinutes(5)->getTimestamp(),
+            ]);
+
+            return true;
+        }
+
+        $guard->login($user, $this->boolean('remember'));
+
+        return false;
     }
 
     /**

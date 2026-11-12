@@ -18,6 +18,9 @@ return [
     // Leeg = geen security.txt.
     'security_contact' => env('POETSPLOEG_SECURITY_CONTACT'),
 
+    // Tweestapsverificatie verplicht voor planners en teamleiders (medewerkers: vrijwillig).
+    'two_factor_required' => (bool) env('POETSPLOEG_2FA_REQUIRED', true),
+
     // Logboek (inzage persoonsgegevens, inloggen, beheeracties): zoveel maanden bewaren.
     'audit_retention_months' => (int) env('POETSPLOEG_AUDIT_RETENTION_MONTHS', 12),
 
