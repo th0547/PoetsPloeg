@@ -18,6 +18,9 @@ return [
     // Leeg = geen security.txt.
     'security_contact' => env('POETSPLOEG_SECURITY_CONTACT'),
 
+    // Logboek (inzage persoonsgegevens, inloggen, beheeracties): zoveel maanden bewaren.
+    'audit_retention_months' => (int) env('POETSPLOEG_AUDIT_RETENTION_MONTHS', 12),
+
     'weekdays' => [
         1 => 'maandag', 2 => 'dinsdag', 3 => 'woensdag', 4 => 'donderdag',
         5 => 'vrijdag', 6 => 'zaterdag', 7 => 'zondag',

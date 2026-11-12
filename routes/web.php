@@ -3,6 +3,7 @@
 use App\Http\Controllers\AbsenceController;
 use App\Http\Controllers\Api\PlanningApiController;
 use App\Http\Controllers\Api\ShiftApiController;
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\BuildingController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
@@ -51,6 +52,8 @@ Route::middleware(['auth', 'planner'])->group(function () {
     Route::resource('panden.taken', TaskTemplateController::class)
         ->parameters(['panden' => 'building', 'taken' => 'template'])
         ->names('buildings.templates')->except(['index', 'show'])->scoped();
+
+    Route::get('logboek', [AuditLogController::class, 'index'])->middleware('can:view-audit-log')->name('audit-log');
 
     Route::get('hulp/herhaling', [HelpController::class, 'recurrence'])->name('help.recurrence');
 

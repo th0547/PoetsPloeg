@@ -4,6 +4,11 @@ namespace App\Providers;
 
 use App\Http\Controllers\OpenShiftController;
 use App\Models\User;
+use App\Services\Audit;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -28,6 +33,14 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('plan', fn (User $user) => $user->canPlan());
         // Telefoonnummers van medewerkers, contactgegevens en toegangsinstructies van panden.
         Gate::define('view-contact-details', fn (User $user) => $user->canPlan());
+        // Logboek (issue #23): alleen teamleiders.
+        Gate::define('view-audit-log', fn (User $user) => $user->role === 'teamleider');
+
+        // Inloggen en uitloggen in het logboek.
+        Event::listen(Login::class, fn (Login $e) => Audit::log('auth.login', "{$e->user->name} ingelogd", $e->user, [], $e->user));
+        Event::listen(Logout::class, fn (Logout $e) => $e->user ? Audit::log('auth.logout', "{$e->user->name} uitgelogd", $e->user, [], $e->user) : null);
+        Event::listen(Failed::class, fn (Failed $e) => Audit::log('auth.failed', 'Inloggen mislukt', $e->user,
+            ['email' => mb_substr((string) ($e->credentials['email'] ?? ''), 0, 255)]));
 
         // Teller "Open diensten" in het menu (alleen voor ingelogde planners).
         View::composer('layouts.navigation', function ($view) {

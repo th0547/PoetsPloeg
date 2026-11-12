@@ -6,6 +6,7 @@ use App\Models\AvailabilityPattern;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Skill;
+use App\Services\Audit;
 use App\Services\AvailabilityEnforcer;
 use App\Services\EmployeeAccounts;
 use Illuminate\Http\RedirectResponse;
@@ -57,6 +58,8 @@ class EmployeeController extends Controller
 
     public function edit(Employee $employee): View
     {
+        Audit::viewed($employee, "Medewerker {$employee->name}: contactgegevens en verlofgeschiedenis");
+
         return $this->form($employee);
     }
 
@@ -73,6 +76,8 @@ class EmployeeController extends Controller
     {
         $employee->load('user');
         if (! $employee->user && $request->boolean('invite')) {
+            Audit::log('account.invited', "Inlog voor {$employee->name} aangemaakt en uitnodiging gestuurd", $employee);
+
             return $this->accounts->invite($employee)
                 ? " Er is een uitnodiging gestuurd naar {$employee->email} om een wachtwoord in te stellen."
                 : ' Het account is aangemaakt, maar de uitnodiging kon niet worden verstuurd (mailserver). Probeer het later opnieuw met "Opnieuw uitnodigen".';
@@ -102,6 +107,7 @@ class EmployeeController extends Controller
     {
         abort_unless($employee->user, 404);
         $employee->user->delete();
+        Audit::log('account.revoked', "Inlog van {$employee->name} ingetrokken", $employee);
 
         return redirect()->route('employees.edit', $employee)
             ->with('status', "De inlog van {$employee->name} is ingetrokken. Je kunt later een nieuwe uitnodiging sturen.");
@@ -113,6 +119,7 @@ class EmployeeController extends Controller
             $employee->user?->delete();
             $employee->delete();
         });
+        Audit::log('employee.deleted', "Medewerker {$employee->name} verwijderd (inclusief inlog en geschiedenis)", $employee);
 
         return redirect()->route('employees.index')->with('status', 'Medewerker verwijderd.');
     }

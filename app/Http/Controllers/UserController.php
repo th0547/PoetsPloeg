@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\Audit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -27,7 +28,8 @@ class UserController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
-        User::create($data);
+        $user = User::create($data);
+        Audit::log('user.created', "Gebruiker {$user->name} ({$user->roleLabel()}) aangemaakt", $user);
 
         return redirect()->route('users.index')->with('status', 'Gebruiker aangemaakt.');
     }
@@ -49,7 +51,13 @@ class UserController extends Controller
         if ($user->is($request->user()) && $data['role'] !== $user->role) {
             return back()->withErrors(['role' => 'Je kunt je eigen rol niet wijzigen.']);
         }
-        $user->update($data);
+        $user->fill($data);
+        $changed = array_keys(array_diff_key($user->getDirty(), array_flip(['remember_token'])));
+        $user->save();
+        if ($changed) {
+            Audit::log('user.updated', "Gebruiker {$user->name} gewijzigd", $user,
+                ['velden' => array_values(array_map(fn ($f) => $f === 'password' ? 'wachtwoord' : $f, $changed))]);
+        }
 
         return redirect()->route('users.index')->with('status', 'Gebruiker bijgewerkt.');
     }
@@ -63,6 +71,7 @@ class UserController extends Controller
             return $redirect;
         }
         $user->delete();
+        Audit::log('user.deleted', "Gebruiker {$user->name} ({$user->roleLabel()}) verwijderd", $user);
 
         return redirect()->route('users.index')->with('status', 'Gebruiker verwijderd.');
     }
