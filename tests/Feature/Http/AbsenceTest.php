@@ -130,6 +130,6 @@ class AbsenceTest extends TestCase
         Absence::factory()->create(['employee_id' => $this->anna->id, 'type' => 'verlof', 'starts_at' => '2026-12-21 00:00', 'ends_at' => '2026-12-31 23:59']);
 
         $this->get(route('employees.edit', $this->anna))->assertOk()
-            ->assertSeeInOrder(['Nu en gepland', 'Verlof', '21 dec. 2026', 'Geschiedenis (1)', 'Fysiotherapie', '8 mei 2023', '09:00–10:30']);
+            ->assertSeeInOrder(['Nu en gepland', 'Vakantie (snipperuren)', '21 dec. 2026', 'Geschiedenis (1)', 'Fysiotherapie', '8 mei 2023', '09:00–10:30']);
     }
 }

@@ -13,7 +13,11 @@
         ['route' => 'my.planning', 'label' => 'Mijn planning', 'active' => 'my.planning'],
         ['route' => 'my.absences', 'label' => 'Verlof', 'active' => 'my.absences*'],
         ['route' => 'my.availability', 'label' => 'Beschikbaarheid', 'active' => 'my.availability*'],
+        ['route' => 'my.policy', 'label' => 'Regels', 'active' => 'my.policy'],
     ] : []);
+    if (! $canPlan && ! \App\Support\Policy::current()->get('privacy.visible_to_employees')) {
+        $links = array_values(array_filter($links, fn ($l) => $l['route'] !== 'my.policy'));
+    }
     $home = route(Auth::user()->homeRoute());
 @endphp
 <nav x-data="{ open: false }" class="bg-white border-b border-gray-200">
@@ -54,6 +58,7 @@
                         @if ($canPlan)
                             <x-dropdown-link :href="route('skills.index')">Vaardigheden</x-dropdown-link>
                             <x-dropdown-link :href="route('users.index')">Gebruikers</x-dropdown-link>
+                            <x-dropdown-link :href="route('policy.index')">Beleid</x-dropdown-link>
                             <x-dropdown-link :href="route('help.recurrence')">Hulp: herhaling met code</x-dropdown-link>
                             @can('view-audit-log')
                                 <x-dropdown-link :href="route('audit-log')">Logboek</x-dropdown-link>
@@ -91,6 +96,7 @@
                 <x-responsive-nav-link :href="route('shifts.create')">+ Losse opdracht</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('skills.index')">Vaardigheden</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('users.index')">Gebruikers</x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('policy.index')">Beleid</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('help.recurrence')">Hulp: herhaling met code</x-responsive-nav-link>
                 @can('view-audit-log')
                     <x-responsive-nav-link :href="route('audit-log')">Logboek</x-responsive-nav-link>

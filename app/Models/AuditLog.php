@@ -33,6 +33,7 @@ class AuditLog extends Model
         'user.updated' => 'Gebruiker gewijzigd',
         'user.deleted' => 'Gebruiker verwijderd',
         'employee.deleted' => 'Medewerker verwijderd',
+        'policy.updated' => 'Beleid gewijzigd',
         'account.invited' => 'Medewerker uitgenodigd',
         'account.revoked' => 'Inlog ingetrokken',
     ];

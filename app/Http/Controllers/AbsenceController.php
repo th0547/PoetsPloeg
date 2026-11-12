@@ -6,6 +6,7 @@ use App\Models\Absence;
 use App\Models\Employee;
 use App\Models\Shift;
 use App\Services\AbsenceService;
+use App\Support\Policy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,7 @@ class AbsenceController extends Controller
     {
         $filters = $request->validate([
             'medewerker' => ['nullable', 'integer'],
-            'soort' => ['nullable', Rule::in(array_keys(Absence::TYPES))],
+            'soort' => ['nullable', Rule::in(Policy::current()->leaveTypes()->keys()->all())],
             'status' => ['nullable', Rule::in(array_keys(self::STATUS_FILTERS))],
             'periode' => ['nullable', Rule::in(array_keys(self::PERIODS))],
         ]);
@@ -75,7 +76,7 @@ class AbsenceController extends Controller
     {
         $data = $request->validate([
             'employee_id' => ['required', 'exists:employees,id'],
-            'type' => ['required', Rule::in(array_keys(Absence::TYPES))],
+            'type' => ['required', Rule::in(Policy::current()->leaveTypes(true)->keys()->all())],
             'as_request' => ['boolean'],
             'days' => ['required', 'array', 'min:1', 'max:366'],
             'days.*.date' => ['required', 'date_format:Y-m-d', 'distinct'],
@@ -91,7 +92,7 @@ class AbsenceController extends Controller
         ]);
 
         $periods = $service->periodsFromDays($data['days']);
-        $asRequest = ($data['as_request'] ?? false) && ! in_array($data['type'], Absence::UNPLANNED, true);
+        $asRequest = ($data['as_request'] ?? false) && ! in_array($data['type'], Policy::current()->directTypes(), true);
 
         $absences = DB::transaction(fn () => collect($periods)->map(fn (array $period) => Absence::create([
             'employee_id' => $data['employee_id'],

@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Http\Controllers\OpenShiftController;
 use App\Models\User;
 use App\Services\Audit;
+use App\Support\Policy;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -35,6 +36,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-contact-details', fn (User $user) => $user->canPlan());
         // Logboek (issue #23): alleen teamleiders.
         Gate::define('view-audit-log', fn (User $user) => $user->role === 'teamleider');
+        // Beleidspagina (issue #42): lezen mag iedereen met planrechten, wijzigen volgens het beleid zelf.
+        Gate::define('manage-policy', fn (User $user) => $user->canPlan()
+            && (Policy::current()->get('privacy.edit_roles') === 'planners' || $user->role === 'teamleider'));
         // Tweestapsverificatie van een ander account resetten (issue #40): alleen teamleiders.
         Gate::define('reset-two-factor', fn (User $user) => $user->role === 'teamleider');
 
