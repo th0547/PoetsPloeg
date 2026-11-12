@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Absence;
 use App\Models\Shift;
 use App\Models\TaskTemplate;
+use App\Models\TaskTemplatePattern;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonPeriod;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -43,15 +44,27 @@ class ShiftGenerator
         if ($templates->isEmpty()) {
             return 0;
         }
-        $templates->load(['skills:id', 'employees' => fn ($q) => $q->where('active', true)->with('availabilityPatterns')]);
+        $templates->load(['patterns', 'skills:id', 'employees' => fn ($q) => $q->where('active', true)->with('availabilityPatterns')]);
 
-        $existing = Shift::query()
+        // Wat er al staat: per patroon per dag, en per taak per dag en begintijd (twee patronen op
+        // dezelfde dag en tijd geven één dienst). Geannuleerde diensten tellen mee: die blijven weg.
+        $existing = [];
+        Shift::query()
             ->whereIn('task_template_id', $templates->pluck('id'))
             // whereDate: SQLite slaat de datum op als "Y-m-d H:i:s"; zo werkt de vergelijking overal.
             ->whereDate('date', '>=', $from->toDateString())
             ->whereDate('date', '<=', $to->toDateString())
-            ->get(['task_template_id', 'date'])
-            ->mapWithKeys(fn (Shift $s) => [$s->task_template_id.'|'.$s->date->toDateString() => true]);
+            ->get(['task_template_id', 'task_template_pattern_id', 'date', 'starts_at'])
+            ->each(function (Shift $s) use (&$existing) {
+                $date = $s->date->toDateString();
+                $existing[$s->task_template_id.'|'.$date.'|'.$s->starts_at->format('H:i')] = true;
+                if ($s->task_template_pattern_id) {
+                    $existing[$s->task_template_id.'|p'.$s->task_template_pattern_id.'|'.$date] = true;
+                } else {
+                    // Dienst van vóór de patronen: geldt voor de hele taak op die dag.
+                    $existing[$s->task_template_id.'|'.$date] = true;
+                }
+            });
 
         $absences = Absence::query()->effective()
             ->whereIn('employee_id', $templates->flatMap->employees->pluck('id')->unique())
@@ -68,14 +81,20 @@ class ShiftGenerator
                     if (isset($existing[$template->id.'|'.$day->toDateString()])) {
                         continue;
                     }
-                    if (! $this->occursOn($template, $day)) {
-                        continue;
-                    }
                     if ($template->skip_holidays && $this->holidays->isSkippable($day)) {
                         continue;
                     }
-                    $this->createShift($template, $day, $absences);
-                    $created++;
+                    foreach ($template->patternsOn($day) as $pattern) {
+                        $date = $day->toDateString();
+                        $startKey = $template->id.'|'.$date.'|'.substr($pattern->startTime($template), 0, 5);
+                        $patternKey = $template->id.'|p'.$pattern->id.'|'.$date;
+                        if (isset($existing[$patternKey]) || isset($existing[$startKey])) {
+                            continue;
+                        }
+                        $this->createShift($template, $pattern, $day, $absences);
+                        $existing[$patternKey] = $existing[$startKey] = true;
+                        $created++;
+                    }
                 }
             }
         });
@@ -110,48 +129,6 @@ class ShiftGenerator
         }
     }
 
-    public function occursOn(TaskTemplate $template, CarbonImmutable $day): bool
-    {
-        $validFrom = CarbonImmutable::instance($template->valid_from)->startOfDay();
-        if ($day->lt($validFrom)) {
-            return false;
-        }
-        if ($template->valid_until && $day->gt(CarbonImmutable::instance($template->valid_until)->startOfDay())) {
-            return false;
-        }
-
-        $every = max(1, (int) $template->repeat_every);
-
-        switch ($template->recurrence) {
-            case 'weekly':
-                if (! in_array($day->dayOfWeekIso, array_map('intval', $template->weekdays ?? []), true)) {
-                    return false;
-                }
-                $days = $this->daysBetween($validFrom->startOfWeek(), $day->startOfWeek());
-
-                return intdiv($days, 7) % $every === 0;
-
-            case 'monthly_nth_weekday':
-                if ($day->dayOfWeekIso !== (int) $template->weekday || ! $this->monthMatches($validFrom, $day, $every)) {
-                    return false;
-                }
-                if ((int) $template->nth === -1) {
-                    return $day->addWeek()->month !== $day->month;
-                }
-
-                return (int) ceil($day->day / 7) === (int) $template->nth;
-
-            case 'monthly_day':
-                if (! $this->monthMatches($validFrom, $day, $every)) {
-                    return false;
-                }
-
-                return $day->day === min((int) $template->day_of_month, $day->daysInMonth);
-        }
-
-        return false;
-    }
-
     /** Begin- en eindtijd van een dienst; een eindtijd vóór de begintijd valt op de volgende dag. */
     public static function timesFor(CarbonImmutable $day, string $start, string $end): array
     {
@@ -164,28 +141,14 @@ class ShiftGenerator
         return [$startsAt, $endsAt];
     }
 
-    /** Aantal kalenderdagen, ongevoelig voor zomer-/wintertijd. */
-    private function daysBetween(CarbonImmutable $a, CarbonImmutable $b): int
+    private function createShift(TaskTemplate $template, TaskTemplatePattern $pattern, CarbonImmutable $day, Collection $absences): Shift
     {
-        $utc = fn (CarbonImmutable $d) => CarbonImmutable::parse($d->toDateString(), 'UTC');
-
-        return (int) round($utc($a)->diffInDays($utc($b)));
-    }
-
-    private function monthMatches(CarbonImmutable $anchor, CarbonImmutable $day, int $every): bool
-    {
-        $months = ($day->year * 12 + $day->month) - ($anchor->year * 12 + $anchor->month);
-
-        return $months % $every === 0;
-    }
-
-    private function createShift(TaskTemplate $template, CarbonImmutable $day, Collection $absences): Shift
-    {
-        [$startsAt, $endsAt] = self::timesFor($day, $template->start_time, $template->end_time);
+        [$startsAt, $endsAt] = self::timesFor($day, $pattern->startTime($template), $pattern->endTime($template));
 
         $shift = Shift::create([
             'building_id' => $template->building_id,
             'task_template_id' => $template->id,
+            'task_template_pattern_id' => $pattern->id,
             'date' => $day->toDateString(),
             'starts_at' => $startsAt,
             'ends_at' => $endsAt,

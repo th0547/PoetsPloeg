@@ -31,7 +31,7 @@
                                     @unless ($template->active) <span class="chip">inactief</span> @endunless
                                     <p class="text-sm text-gray-600">
                                         {{ $template->recurrenceLabel() }},
-                                        {{ substr($template->start_time, 0, 5) }}–{{ substr($template->end_time, 0, 5) }}
+                                        {{ substr($template->start_time, 0, 5) }}–{{ substr($template->end_time, 0, 5) }}@if ($template->patterns->contains(fn ($p) => $p->hasOwnTimes())) (standaard)@endif
                                         · {{ $template->required_staff }} {{ $template->required_staff === 1 ? 'persoon' : 'personen' }}
                                     </p>
                                     <div class="mt-1 flex flex-wrap gap-1">
@@ -102,7 +102,7 @@
                 $rows = $building->taskTemplates->filter(fn ($t) => $t->active || $grid->has($t->id))->map(fn ($t) => [
                     'key' => $t->id,
                     'name' => $t->name,
-                    'time' => substr($t->start_time, 0, 5).'–'.substr($t->end_time, 0, 5),
+                    'time' => $t->timesLabel(),
                 ])->values();
                 if ($grid->has('los')) {
                     $rows->push(['key' => 'los', 'name' => 'Losse opdrachten', 'time' => '']);
@@ -208,7 +208,7 @@
                                 <tr x-data="{ staff: {{ $template->required_staff }}, checked: {{ count($fixedIds) }} }" class="{{ $template->active ? '' : 'opacity-60' }}">
                                     <td class="sticky left-0 z-10 w-40 min-w-[9rem] bg-white px-3 py-2 align-top sm:w-auto sm:min-w-[14rem]">
                                         <div class="font-medium text-gray-900">{{ $template->name }}</div>
-                                        <div class="text-xs text-gray-500">{{ substr($template->start_time, 0, 5) }}–{{ substr($template->end_time, 0, 5) }} · {{ $template->recurrenceLabel() }}</div>
+                                        <div class="text-xs text-gray-500">{{ $template->timesLabel() }} · {{ $template->recurrenceLabel() }}</div>
                                         <p x-show="checked > staff" x-cloak class="mt-1 text-xs text-amber-700">
                                             Meer vinkjes dan personen: alleen de eerste <span x-text="staff"></span> worden ingepland.
                                             <button type="button" class="underline" @click="staff = checked">Aantal = <span x-text="checked"></span></button>

@@ -24,7 +24,7 @@ class AvailabilityEnforcementTest extends TestCase
 
     public function test_generator_does_not_assign_fixed_staff_outside_availability(): void
     {
-        $template = TaskTemplate::factory()->create(['weekdays' => [1, 3], 'start_time' => '09:00', 'end_time' => '11:00', 'valid_from' => '2026-10-01']);
+        $template = TaskTemplate::factory()->weekly([1, 3])->create(['start_time' => '09:00', 'end_time' => '11:00', 'valid_from' => '2026-10-01']);
         $student = Employee::factory()->create();
         $student->availabilityPatterns()->create(['weekday' => 1, 'type' => 'unavailable', 'start_time' => '08:00', 'end_time' => '15:00', 'note' => 'School']);
         $template->employees()->attach($student);

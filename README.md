@@ -4,7 +4,7 @@ Webapplicatie om schoonmaakdiensten voor meerdere panden te plannen, met vaste e
 
 ## Wat kan het?
 
-- **Panden** met pandinfo (adres, contact, toegangsinstructies) en **vaste taken**: wekelijks, om de week of minder vaak, maandelijks op een weekdag (bijv. de eerste maandag) of op een vaste datum. Elke taak heeft tijden, het aantal personen, vereiste vaardigheden en een vaste bezetting.
+- **Panden** met pandinfo (adres, contact, toegangsinstructies) en **vaste taken**: wekelijks, om de week of minder vaak, maandelijks op een weekdag (bijv. de eerste maandag) of op een vaste datum. Elke taak heeft tijden, het aantal personen, vereiste vaardigheden en een vaste bezetting. Een taak kan **meerdere patronen** hebben (bijv. de ene week donderdag, de week erop maandag), elk met een eigen startpunt en eventueel eigen tijden. Gevorderde gebruikers kiezen **Aangepast (code)** en schrijven het patroon als iCalendar-RRULE; uitleg staat op de hulppagina `/hulp/herhaling`.
 - **Diensten worden automatisch ingepland** tot 12 weken vooruit. Feestdagen worden desgewenst overgeslagen. Handmatig aangepaste diensten blijven altijd staan.
 - **Medewerkers** met vaardigheden, pandkennis (ingewerkt op), een vast weekpatroon van beschikbaarheid (eenmalige afwijkingen leg je vast als afwezigheid) en contracturen (min/max per week).
 - **Verlof, ziekte en uitval**: bij registratie wordt de medewerker automatisch van zijn diensten gehaald. Die diensten komen in "Open diensten" met de knop **Zoek vervanger**.

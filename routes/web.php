@@ -8,6 +8,7 @@ use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\HelpController;
 use App\Http\Controllers\My\MyController;
 use App\Http\Controllers\OpenShiftController;
 use App\Http\Controllers\PlanningController;
@@ -51,6 +52,8 @@ Route::middleware(['auth', 'planner'])->group(function () {
         ->parameters(['panden' => 'building', 'taken' => 'template'])
         ->names('buildings.templates')->except(['index', 'show'])->scoped();
 
+    Route::get('hulp/herhaling', [HelpController::class, 'recurrence'])->name('help.recurrence');
+
     Route::resource('vaardigheden', SkillController::class)
         ->parameters(['vaardigheden' => 'skill'])->names('skills')->only(['index', 'store', 'update', 'destroy']);
 
@@ -66,6 +69,8 @@ Route::middleware(['auth', 'planner'])->group(function () {
         Route::get('planning', [PlanningApiController::class, 'timeline'])->name('planning');
         Route::post('planning/move', [PlanningApiController::class, 'move'])->name('planning.move');
         Route::get('calendar', [PlanningApiController::class, 'calendar'])->name('calendar');
+        Route::post('recurrence/preview', [TaskTemplateController::class, 'preview'])
+            ->middleware('throttle:60,1')->name('recurrence.preview');
 
         Route::get('shifts/{shift}', [ShiftApiController::class, 'show'])->name('shifts.show');
         Route::patch('shifts/{shift}', [ShiftApiController::class, 'update'])->name('shifts.update');

@@ -24,10 +24,7 @@ class BuildingPageTest extends TestCase
     public function test_week_grid_shows_tasks_per_workday(): void
     {
         $building = Building::factory()->create();
-        $template = TaskTemplate::factory()->create([
-            'building_id' => $building->id, 'name' => 'Toilettenronde', 'weekdays' => [1, 2, 3, 4, 5],
-            'start_time' => '08:00', 'end_time' => '09:30', 'valid_from' => '2026-10-01',
-        ]);
+        $template = TaskTemplate::factory()->weekly([1, 2, 3, 4, 5])->create(['building_id' => $building->id, 'name' => 'Toilettenronde', 'start_time' => '08:00', 'end_time' => '09:30', 'valid_from' => '2026-10-01']);
         $anna = Employee::factory()->create(['name' => 'Anna Jansen']);
         $template->employees()->attach($anna);
 
@@ -58,8 +55,8 @@ class BuildingPageTest extends TestCase
     public function test_staffing_table_updates_fixed_staff_and_regenerates_shifts(): void
     {
         $building = Building::factory()->create();
-        $a = TaskTemplate::factory()->create(['building_id' => $building->id, 'weekdays' => [1, 2, 3, 4, 5], 'valid_from' => '2026-10-01']);
-        $b = TaskTemplate::factory()->create(['building_id' => $building->id, 'weekdays' => [1], 'valid_from' => '2026-10-01', 'start_time' => '20:00', 'end_time' => '21:00']);
+        $a = TaskTemplate::factory()->weekly([1, 2, 3, 4, 5])->create(['building_id' => $building->id, 'valid_from' => '2026-10-01']);
+        $b = TaskTemplate::factory()->weekly([1])->create(['building_id' => $building->id, 'valid_from' => '2026-10-01', 'start_time' => '20:00', 'end_time' => '21:00']);
         [$e1, $e2, $e3] = Employee::factory()->count(3)->create();
 
         $this->get(route('buildings.show', $building))->assertOk()->assertSee('Vaste bezetting');
@@ -82,7 +79,7 @@ class BuildingPageTest extends TestCase
     public function test_staffing_keeps_manually_modified_shifts(): void
     {
         $building = Building::factory()->create();
-        $template = TaskTemplate::factory()->create(['building_id' => $building->id, 'weekdays' => [3], 'valid_from' => '2026-10-01']);
+        $template = TaskTemplate::factory()->weekly([3])->create(['building_id' => $building->id, 'valid_from' => '2026-10-01']);
         $employee = Employee::factory()->create();
         $this->get(route('buildings.show', $building));
         $shift = Shift::where('task_template_id', $template->id)->whereDate('date', '2026-10-14')->first();
