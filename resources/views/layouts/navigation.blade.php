@@ -58,6 +58,7 @@
                         @if ($canPlan)
                             <x-dropdown-link :href="route('skills.index')">Vaardigheden</x-dropdown-link>
                             <x-dropdown-link :href="route('users.index')">Gebruikers</x-dropdown-link>
+                            <x-dropdown-link :href="route('availability.overview')">Beschikbaarheid bevestigd</x-dropdown-link>
                             <x-dropdown-link :href="route('policy.index')">Beleid</x-dropdown-link>
                             <x-dropdown-link :href="route('help.recurrence')">Hulp: herhaling met code</x-dropdown-link>
                             @can('view-audit-log')
@@ -96,6 +97,7 @@
                 <x-responsive-nav-link :href="route('shifts.create')">+ Losse opdracht</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('skills.index')">Vaardigheden</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('users.index')">Gebruikers</x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('availability.overview')">Beschikbaarheid bevestigd</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('policy.index')">Beleid</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('help.recurrence')">Hulp: herhaling met code</x-responsive-nav-link>
                 @can('view-audit-log')

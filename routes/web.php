@@ -4,6 +4,7 @@ use App\Http\Controllers\AbsenceController;
 use App\Http\Controllers\Api\PlanningApiController;
 use App\Http\Controllers\Api\ShiftApiController;
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\AvailabilityOverviewController;
 use App\Http\Controllers\BuildingController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
@@ -56,6 +57,7 @@ Route::middleware(['auth', 'planner'])->group(function () {
         ->parameters(['panden' => 'building', 'taken' => 'template'])
         ->names('buildings.templates')->except(['index', 'show'])->scoped();
 
+    Route::get('beschikbaarheid', AvailabilityOverviewController::class)->name('availability.overview');
     Route::get('beleid', [PolicyController::class, 'index'])->name('policy.index');
     Route::put('beleid', [PolicyController::class, 'update'])->middleware('can:manage-policy')->name('policy.update');
     Route::get('beleid/medewerkers', [PolicyController::class, 'preview'])->name('policy.preview');
@@ -108,6 +110,7 @@ Route::middleware(['auth', 'employee'])->prefix('mijn')->name('my.')->group(func
     Route::get('beschikbaarheid', [MyController::class, 'availability'])->name('availability');
     Route::get('beleid', [PolicyController::class, 'employee'])->name('policy');
     Route::put('beschikbaarheid', [MyController::class, 'updateAvailability'])->name('availability.update');
+    Route::post('beschikbaarheid/bevestigen', [MyController::class, 'confirmWeek'])->name('availability.confirm');
 });
 
 Route::middleware('auth')->group(function () {

@@ -5,12 +5,14 @@ namespace App\Http\Controllers\My;
 use App\Http\Controllers\Controller;
 use App\Models\Absence;
 use App\Models\AvailabilityPattern;
+use App\Models\AvailabilityWeek;
 use App\Models\Employee;
 use App\Models\Shift;
 use App\Services\AbsenceService;
 use App\Services\LeaveCounters;
 use App\Services\LeaveHours;
 use App\Services\ShiftGenerator;
+use App\Services\WeekAvailability;
 use App\Support\Policy;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -167,6 +169,14 @@ class MyController extends Controller
             }
         }
 
+        if ($type['counts_as'] === 'unavailable') {
+            $confirmed = app(WeekAvailability::class)->confirmedFuture($employee)
+                ->filter(fn ($w) => collect($periods)->contains(fn ($p) => $p[0]->lt($w->week_start->copy()->addWeek()) && $p[1]->gt($w->week_start)));
+            if ($confirmed->isNotEmpty() && Policy::current()->get('availability.after_confirm') === 'locked') {
+                throw ValidationException::withMessages(['days' => 'Je hebt deze week al bevestigd. Vraag je planner om een wijziging.']);
+            }
+        }
+
         $direct = $type['direct'];
         $absences = DB::transaction(fn () => collect($periods)->map(fn (array $period) => Absence::create([
             'employee_id' => $employee->id,
@@ -187,6 +197,10 @@ class MyController extends Controller
             default => "Je aanvraag{$hoursText} is ingediend. Je blijft voorlopig ingepland; zodra er voor al je diensten een vervanger is, wordt je verlof goedgekeurd.",
         };
 
+        if ($type['counts_as'] === 'unavailable') {
+            app(WeekAvailability::class)->afterChange($employee);
+        }
+
         return redirect()->route('my.absences')->with('status', $message);
     }
 
@@ -202,15 +216,59 @@ class MyController extends Controller
         return redirect()->route('my.absences')->with('status', 'Je aanvraag is ingetrokken.');
     }
 
-    public function availability(Request $request): View
+    public function availability(Request $request, WeekAvailability $weeks): View
     {
         $employee = $this->employee($request)->load('availabilityPatterns');
+        $policy = Policy::current();
+        $rows = AvailabilityWeek::where('employee_id', $employee->id)->get()->keyBy(fn ($w) => $w->week_start->toDateString());
 
         return view('my.availability', [
             'employee' => $employee,
             'patterns' => old('patterns', $employee->availabilityRows()),
             'absenceBlocks' => $employee->absenceBlocks(),
+            'confirmEnabled' => $policy->get('availability.confirm_weekly'),
+            'otherEmployerField' => $policy->get('availability.other_employer_field'),
+            'afterConfirm' => $policy->get('availability.after_confirm'),
+            'confirmWeeks' => WeekAvailability::weeks()->map(function (CarbonImmutable $week) use ($employee, $weeks, $rows) {
+                $hours = $weeks->hours($employee, $week);
+
+                return [
+                    'start' => $week,
+                    'hours' => $hours,
+                    'below' => $weeks->belowContract($employee, $hours, $week),
+                    'row' => $rows->get($week->toDateString()),
+                ];
+            }),
         ]);
+    }
+
+    /** Beschikbaarheid van een week bevestigen (issue #45). */
+    public function confirmWeek(Request $request, WeekAvailability $weeks): RedirectResponse
+    {
+        $employee = $this->employee($request);
+        $allowed = WeekAvailability::weeks()->map->toDateString()->all();
+        $data = $request->validate([
+            'week' => ['required', 'date_format:Y-m-d', Rule::in($allowed)],
+            'explanation' => ['nullable', 'string', 'max:1000'],
+            'other_employer' => ['nullable', 'string', 'max:255'],
+        ], ['week.in' => 'Deze week kun je nu niet bevestigen.']);
+        $week = CarbonImmutable::parse($data['week']);
+        $hours = $weeks->hours($employee, $week);
+
+        if ($weeks->belowContract($employee, $hours, $week) && blank($data['explanation'] ?? null)) {
+            throw ValidationException::withMessages(['explanation' => sprintf(
+                'Je bent deze week %s uur beschikbaar; je contract is %s uur. Geef een toelichting, neem verlof op of overleg met je teamleider.',
+                rtrim(rtrim(number_format($hours, 2, ',', ''), '0'), ','), rtrim(rtrim(number_format((float) $employee->contract_hours_min, 2, ',', ''), '0'), ','),
+            )]);
+        }
+
+        $row = AvailabilityWeek::where('employee_id', $employee->id)->whereDate('week_start', $week)->first()
+            ?? new AvailabilityWeek(['employee_id' => $employee->id, 'week_start' => $week->toDateString()]);
+        $row->fill(['confirmed_at' => now(), 'available_hours' => $hours, 'explanation' => $data['explanation'] ?? null,
+            'other_employer' => $data['other_employer'] ?? null, 'changed_after_confirm' => false])->save();
+
+        return redirect()->to(route('my.availability').'#bevestigen')
+            ->with('status', 'Beschikbaarheid voor week '.$week->isoWeek().' bevestigd. Dank je wel!');
     }
 
     /**
@@ -222,7 +280,12 @@ class MyController extends Controller
         $employee = $this->employee($request);
         $data = $request->validate(AvailabilityPattern::rules());
 
+        // Bevestigde weken (issue #45): vergrendeld = niet meer wijzigen, anders bijwerken/markeren.
+        if (Policy::current()->get('availability.after_confirm') === 'locked' && app(WeekAvailability::class)->confirmedFuture($employee)->isNotEmpty()) {
+            throw ValidationException::withMessages(['patterns' => 'Je hebt al weken bevestigd. Vraag je planner om je beschikbaarheid te wijzigen.']);
+        }
         DB::transaction(fn () => $employee->replaceAvailability($data['patterns'] ?? []));
+        app(WeekAvailability::class)->afterChange($employee);
 
         return redirect()->route('my.availability')->with('status',
             'Je beschikbaarheid is opgeslagen. Diensten waarvoor je al bent ingepland blijven staan; heb je daar een probleem mee, overleg dan met je planner.');
