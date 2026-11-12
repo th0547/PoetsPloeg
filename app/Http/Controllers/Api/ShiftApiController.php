@@ -8,6 +8,7 @@ use App\Models\Shift;
 use App\Models\ShiftAssignment;
 use App\Models\Skill;
 use App\Services\AbsenceService;
+use App\Services\Audit;
 use App\Services\ConflictChecker;
 use App\Services\ReplacementFinder;
 use App\Services\ShiftGenerator;
@@ -24,6 +25,11 @@ class ShiftApiController extends Controller
 
     public function show(Shift $shift): JsonResponse
     {
+        if (Gate::allows('view-contact-details')) {
+            Audit::viewed($shift, sprintf('Dienst %s (%s, %s): telefoonnummers en toegangsinstructies',
+                $shift->title, $shift->building?->name, $shift->starts_at->format('d-m-Y H:i')));
+        }
+
         return response()->json($this->present($shift));
     }
 

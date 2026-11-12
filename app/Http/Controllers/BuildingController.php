@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Shift;
+use App\Services\Audit;
 use App\Services\DutchHolidays;
 use App\Services\ShiftGenerator;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 class BuildingController extends Controller
@@ -44,6 +46,9 @@ class BuildingController extends Controller
     public function show(Request $request, Building $building, ShiftGenerator $generator, DutchHolidays $holidays): View
     {
         $building->load(['taskTemplates.skills', 'taskTemplates.employees', 'taskTemplates.patterns', 'employees']);
+        if (Gate::allows('view-contact-details')) {
+            Audit::viewed($building, "Pand {$building->name}: contactgegevens en toegangsinstructies");
+        }
 
         // Weekrooster: maandag t/m zondag van de gekozen week.
         $weekStart = rescue(fn () => CarbonImmutable::parse($request->query('week', 'today')), CarbonImmutable::today(), false)

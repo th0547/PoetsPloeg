@@ -55,6 +55,9 @@
                             <x-dropdown-link :href="route('skills.index')">Vaardigheden</x-dropdown-link>
                             <x-dropdown-link :href="route('users.index')">Gebruikers</x-dropdown-link>
                             <x-dropdown-link :href="route('help.recurrence')">Hulp: herhaling met code</x-dropdown-link>
+                            @can('view-audit-log')
+                                <x-dropdown-link :href="route('audit-log')">Logboek</x-dropdown-link>
+                            @endcan
                         @endif
                         <x-dropdown-link :href="route('profile.edit')">Mijn profiel</x-dropdown-link>
                         <form method="POST" action="{{ route('logout') }}">
@@ -89,6 +92,9 @@
                 <x-responsive-nav-link :href="route('skills.index')">Vaardigheden</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('users.index')">Gebruikers</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('help.recurrence')">Hulp: herhaling met code</x-responsive-nav-link>
+                @can('view-audit-log')
+                    <x-responsive-nav-link :href="route('audit-log')">Logboek</x-responsive-nav-link>
+                @endcan
             @endif
         </div>
         <div class="pt-4 pb-1 border-t border-gray-200">

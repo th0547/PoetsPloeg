@@ -12,6 +12,7 @@ Webapplicatie om schoonmaakdiensten voor meerdere panden te plannen, met vaste e
 - **Gantt-planning** per medewerker of per pand (dag, week of maand), met slepen en neerzetten. Elke wijziging wordt gecontroleerd op dubbel ingepland, afwezigheid, beschikbaarheid, vaardigheden, pandkennis en contracturen.
 - **Maandkalender** en een **dagoverzicht** met open plekken en waarschuwingen.
 - Rollen: **planner** en **teamleider**, met dezelfde rechten, en **medewerker**.
+- **Logboek** (alleen teamleiders, menu → Logboek): wie wanneer persoonsgegevens heeft ingezien (telefoonnummers, toegangsinstructies, verlofgeschiedenis), in- en uitloggen, mislukte inlogpogingen en beheer van gebruikers en inlogs. Regels worden na 12 maanden opgeruimd (`POETSPLOEG_AUDIT_RETENTION_MONTHS`).
 - **Medewerker-accounts**: bij een medewerker vink je *Uitnodiging sturen om in te loggen* aan. De medewerker krijgt een e-mail met een link (7 dagen geldig) om zelf een wachtwoord in te stellen en krijgt de rol Medewerker. Na het inloggen ziet een medewerker alleen **Mijn planning** (eigen diensten, met adres en collega's), **Verlof** (aanvragen als verzoek, openstaande aanvragen intrekken) en **Beschikbaarheid** (eigen weekpatroon). Een inactieve medewerker kan niet inloggen. Voor de uitnodigingsmail moet de mailer (`MAIL_*` in `.env`) zijn ingesteld.
 
 Techniek: Laravel 12 (PHP 8.3), MySQL 8, Blade + Alpine.js + Tailwind, vis-timeline (Gantt) en FullCalendar.
