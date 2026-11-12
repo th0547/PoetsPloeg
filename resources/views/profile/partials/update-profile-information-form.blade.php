@@ -9,6 +9,20 @@
         </p>
     </header>
 
+    @if ($user->isEmployee())
+        {{-- Medewerker-account: gegevens worden door de teamleider beheerd. --}}
+        <dl class="mt-6 space-y-4 text-sm">
+            <div>
+                <dt class="font-medium text-gray-700">Naam</dt>
+                <dd class="mt-1 text-gray-900">{{ $user->name }}</dd>
+            </div>
+            <div>
+                <dt class="font-medium text-gray-700">E-mailadres (inlognaam)</dt>
+                <dd class="mt-1 text-gray-900">{{ $user->email }}</dd>
+            </div>
+        </dl>
+        <p class="mt-4 text-sm text-gray-600">Klopt dit niet? Vraag je teamleider om het aan te passen.</p>
+    @else
     <form id="send-verification" method="post" action="{{ route('verification.send') }}">
         @csrf
     </form>
@@ -61,4 +75,5 @@
             @endif
         </div>
     </form>
+    @endif
 </section>
