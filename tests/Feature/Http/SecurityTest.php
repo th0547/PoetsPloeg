@@ -17,7 +17,8 @@ class SecurityTest extends TestCase
     /** Routes die zonder planner-rechten bereikbaar mogen zijn. */
     private const PUBLIC_OR_PERSONAL = [
         'health', 'security-txt', 'login', 'logout', 'password.request', 'password.email', 'password.reset',
-        'password.store', 'invitation.show', 'invitation.store', 'password.confirm', 'password.update', 'verification.notice', 'verification.verify',
+        'password.store', 'invitation.show', 'invitation.store', 'two-factor.challenge', 'two-factor.show',
+        'two-factor.confirm', 'two-factor.recovery-codes', 'two-factor.destroy', 'password.confirm', 'password.update', 'verification.notice', 'verification.verify',
         'verification.send', 'profile.edit', 'profile.update', 'profile.destroy', 'storage.local', 'storage.local.upload',
     ];
 

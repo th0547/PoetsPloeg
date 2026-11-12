@@ -35,6 +35,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-contact-details', fn (User $user) => $user->canPlan());
         // Logboek (issue #23): alleen teamleiders.
         Gate::define('view-audit-log', fn (User $user) => $user->role === 'teamleider');
+        // Tweestapsverificatie van een ander account resetten (issue #40): alleen teamleiders.
+        Gate::define('reset-two-factor', fn (User $user) => $user->role === 'teamleider');
 
         // Inloggen en uitloggen in het logboek.
         Event::listen(Login::class, fn (Login $e) => Audit::log('auth.login', "{$e->user->name} ingelogd", $e->user, [], $e->user));

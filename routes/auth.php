@@ -8,6 +8,8 @@ use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\TwoFactorChallengeController;
+use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
 
@@ -28,6 +30,12 @@ Route::middleware('guest')->group(function () {
 
     Route::post('reset-password', [NewPasswordController::class, 'store'])
         ->name('password.store');
+
+    // Tweede stap bij het inloggen (code uit de app of herstelcode).
+    Route::get('tweestapsverificatie/code', [TwoFactorChallengeController::class, 'create'])
+        ->name('two-factor.challenge');
+    Route::post('tweestapsverificatie/code', [TwoFactorChallengeController::class, 'store'])
+        ->middleware('throttle:10,1');
 
     // Uitnodiging voor een medewerker: eerste wachtwoord instellen.
     Route::get('uitnodiging/{token}', [InvitationController::class, 'show'])
@@ -56,6 +64,14 @@ Route::middleware('auth')->group(function () {
     Route::post('confirm-password', [ConfirmablePasswordController::class, 'store']);
 
     Route::put('password', [PasswordController::class, 'update'])->name('password.update');
+
+    // Tweestapsverificatie instellen en beheren (eerst opnieuw het wachtwoord bevestigen).
+    Route::middleware('password.confirm')->group(function () {
+        Route::get('tweestapsverificatie', [TwoFactorController::class, 'show'])->name('two-factor.show');
+        Route::post('tweestapsverificatie', [TwoFactorController::class, 'confirm'])->name('two-factor.confirm');
+        Route::post('tweestapsverificatie/herstelcodes', [TwoFactorController::class, 'recoveryCodes'])->name('two-factor.recovery-codes');
+        Route::delete('tweestapsverificatie', [TwoFactorController::class, 'destroy'])->name('two-factor.destroy');
+    });
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');

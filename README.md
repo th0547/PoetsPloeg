@@ -12,6 +12,7 @@ Webapplicatie om schoonmaakdiensten voor meerdere panden te plannen, met vaste e
 - **Gantt-planning** per medewerker of per pand (dag, week of maand), met slepen en neerzetten. Elke wijziging wordt gecontroleerd op dubbel ingepland, afwezigheid, beschikbaarheid, vaardigheden, pandkennis en contracturen.
 - **Maandkalender** en een **dagoverzicht** met open plekken en waarschuwingen.
 - Rollen: **planner** en **teamleider**, met dezelfde rechten, en **medewerker**.
+- **Tweestapsverificatie (2FA)** met een authenticator-app: verplicht voor planners en teamleiders, vrijwillig voor medewerkers (Mijn profiel → Tweestapsverificatie). Herstelcodes bij verlies van de telefoon; een teamleider kan 2FA van een ander resetten, en op de server kan het met `php artisan poetsploeg:reset-2fa <e-mail>`.
 - **Logboek** (alleen teamleiders, menu → Logboek): wie wanneer persoonsgegevens heeft ingezien (telefoonnummers, toegangsinstructies, verlofgeschiedenis), in- en uitloggen, mislukte inlogpogingen en beheer van gebruikers en inlogs. Regels worden na 12 maanden opgeruimd (`POETSPLOEG_AUDIT_RETENTION_MONTHS`).
 - **Medewerker-accounts**: bij een medewerker vink je *Uitnodiging sturen om in te loggen* aan. De medewerker krijgt een e-mail met een link (7 dagen geldig) om zelf een wachtwoord in te stellen en krijgt de rol Medewerker. Na het inloggen ziet een medewerker alleen **Mijn planning** (eigen diensten, met adres en collega's), **Verlof** (aanvragen als verzoek, openstaande aanvragen intrekken) en **Beschikbaarheid** (eigen weekpatroon). Een inactieve medewerker kan niet inloggen. Voor de uitnodigingsmail moet de mailer (`MAIL_*` in `.env`) zijn ingesteld.
 
@@ -74,6 +75,7 @@ Zie [docs/uitrol.md](docs/uitrol.md): Docker op de Hetzner-server, uitrol via Gi
 | Commando | Wat |
 |---|---|
 | `php artisan poetsploeg:create-planner` | Planner- of teamleideraccount aanmaken (`--role=teamleider`) |
+| `php artisan poetsploeg:reset-2fa <e-mail>` | Noodroute: tweestapsverificatie van een account uitzetten |
 | `php artisan poetsploeg:generate-shifts` | Diensten aanvullen tot 12 weken vooruit (draait ook elke nacht) |
 | `php artisan poetsploeg:release-unavailable` | Eenmalig opschonen: medewerkers van toekomstige diensten buiten hun beschikbaarheid halen |
 | `php artisan poetsploeg:learn-buildings` | Wie 2 diensten op een pand heeft gedraaid, kent dat pand (draait ook elk uur; aantal via `POETSPLOEG_LEARN_BUILDING_AFTER`) |
