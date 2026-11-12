@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class ProfileTest extends TestCase
@@ -95,5 +97,53 @@ class ProfileTest extends TestCase
             ->assertRedirect('/profile');
 
         $this->assertNotNull($user->fresh());
+    }
+
+    private function employeeUser(): User
+    {
+        $employee = Employee::factory()->create(['name' => 'Anna', 'email' => 'anna@example.com']);
+
+        return User::factory()->create(['role' => 'medewerker', 'employee_id' => $employee->id, 'name' => 'Anna', 'email' => 'anna@example.com']);
+    }
+
+    public function test_employees_cannot_change_name_or_email_themselves(): void
+    {
+        $user = $this->employeeUser();
+        $this->actingAs($user);
+
+        $this->get('/profile')->assertOk()
+            ->assertSee('Vraag je teamleider om het aan te passen')
+            ->assertDontSee('name="email"', false)
+            ->assertDontSee('Delete Account');
+
+        $this->patch('/profile', ['name' => 'Iemand anders', 'email' => 'ander@example.com'])->assertForbidden();
+
+        $user->refresh();
+        $this->assertSame('Anna', $user->name);
+        $this->assertSame('anna@example.com', $user->email);
+        $this->assertNotNull($user->email_verified_at);
+        $this->assertFalse($user->invitationPending());
+    }
+
+    public function test_employees_cannot_delete_their_own_account(): void
+    {
+        $user = $this->employeeUser();
+
+        $this->actingAs($user)->delete('/profile', ['password' => 'password'])->assertForbidden();
+
+        $this->assertNotNull($user->fresh());
+    }
+
+    public function test_employees_can_still_change_their_password(): void
+    {
+        $user = $this->employeeUser();
+
+        $this->actingAs($user)->from('/profile')->put('/password', [
+            'current_password' => 'password',
+            'password' => 'nieuw-wachtwoord',
+            'password_confirmation' => 'nieuw-wachtwoord',
+        ])->assertSessionHasNoErrors()->assertRedirect('/profile');
+
+        $this->assertTrue(Hash::check('nieuw-wachtwoord', $user->fresh()->password));
     }
 }

@@ -26,6 +26,10 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
+        // Naam en e-mail van een medewerker-account horen bij de medewerker en worden door de
+        // teamleider beheerd (EmployeeAccounts::sync); anders lopen account en medewerker uit de pas.
+        abort_if($request->user()->isEmployee(), 403, 'Je naam en e-mailadres worden door je teamleider beheerd.');
+
         $request->user()->fill($request->validated());
 
         if ($request->user()->isDirty('email')) {
@@ -42,6 +46,9 @@ class ProfileController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        // Een medewerker-account wordt door de teamleider ingetrokken, niet door de medewerker zelf.
+        abort_if($request->user()->isEmployee(), 403, 'Vraag je teamleider om je inlog in te trekken.');
+
         $request->validateWithBag('userDeletion', [
             'password' => ['required', 'current_password'],
         ]);
