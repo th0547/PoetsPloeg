@@ -62,7 +62,7 @@
 
     <div class="card overflow-x-auto">
         <table class="table">
-            <thead class="bg-gray-50"><tr><th>Medewerker</th><th>Soort</th><th>Van</th><th>Tot en met</th><th>Notitie</th><th></th></tr></thead>
+            <thead class="bg-gray-50"><tr><th>Medewerker</th><th>Soort</th><th>Van</th><th>Tot en met</th><th>Uren</th><th>Notitie</th><th></th></tr></thead>
             <tbody class="divide-y divide-gray-100">
                 @forelse ($absences as $absence)
                     <tr class="{{ ! $withdrawn && $absence->starts_at->isPast() && $absence->ends_at->isFuture() ? 'bg-amber-50/50' : '' }} {{ $withdrawn ? 'text-gray-500' : '' }}">
@@ -77,6 +77,7 @@
                         </td>
                         <td class="whitespace-nowrap">{{ $absence->starts_at->translatedFormat('D j M Y H:i') }}</td>
                         <td class="whitespace-nowrap">{{ $absence->ends_at->translatedFormat('D j M Y H:i') }}</td>
+                        <td class="whitespace-nowrap text-sm">{{ $absence->hoursLabel() }}</td>
                         <td class="text-gray-600">{{ $absence->note }}</td>
                         <td class="text-right whitespace-nowrap">
                             @if ($withdrawn)

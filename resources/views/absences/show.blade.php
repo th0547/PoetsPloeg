@@ -9,6 +9,7 @@
     </x-slot>
 
     <div x-data @shift-panel-closed.window="if ($event.detail.changed) window.location.reload()" class="max-w-4xl space-y-6">
+        @include('absences.partials.hours')
         <section class="card">
             <div class="border-b px-4 py-3">
                 <h2 class="font-semibold text-gray-800">Open diensten in deze periode ({{ $openShifts->count() }})</h2>

@@ -74,6 +74,7 @@ Route::middleware(['auth', 'planner'])->group(function () {
     Route::resource('gebruikers', UserController::class)
         ->parameters(['gebruikers' => 'user'])->names('users')->except('show');
 
+    Route::patch('afwezigheid/{absence}/uren', [AbsenceController::class, 'updateHours'])->name('absences.hours');
     Route::post('afwezigheid/{absence}/afwijzen', [AbsenceController::class, 'reject'])->name('absences.reject');
     Route::resource('afwezigheid', AbsenceController::class)
         ->parameters(['afwezigheid' => 'absence'])->names('absences')->only(['index', 'create', 'store', 'show', 'destroy']);

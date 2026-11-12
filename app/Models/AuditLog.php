@@ -34,6 +34,7 @@ class AuditLog extends Model
         'user.deleted' => 'Gebruiker verwijderd',
         'employee.deleted' => 'Medewerker verwijderd',
         'policy.updated' => 'Beleid gewijzigd',
+        'absence.hours' => 'Verlofuren aangepast',
         'account.invited' => 'Medewerker uitgenodigd',
         'account.revoked' => 'Inlog ingetrokken',
     ];

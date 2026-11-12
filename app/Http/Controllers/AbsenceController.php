@@ -6,6 +6,8 @@ use App\Models\Absence;
 use App\Models\Employee;
 use App\Models\Shift;
 use App\Services\AbsenceService;
+use App\Services\Audit;
+use App\Services\LeaveHours;
 use App\Support\Policy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -72,7 +74,7 @@ class AbsenceController extends Controller
         ]);
     }
 
-    public function store(Request $request, AbsenceService $service): RedirectResponse
+    public function store(Request $request, AbsenceService $service, LeaveHours $leaveHours): RedirectResponse
     {
         $data = $request->validate([
             'employee_id' => ['required', 'exists:employees,id'],
@@ -109,6 +111,13 @@ class AbsenceController extends Controller
         } else {
             $affected = $absences->sum(fn (Absence $absence) => $service->apply($absence)->count());
             $message = $this->registeredMessage($absences->count(), $affected, $absences->first()->employee->name);
+            // Ziek tijdens vakantie: die uren tellen niet als vakantie (cao art. 29 lid 2).
+            if (Policy::current()->leaveType($data['type'])['counts_as'] === 'sickness') {
+                $moved = $absences->sum(fn (Absence $absence) => $leaveHours->applySickness($absence));
+                if ($moved > 0) {
+                    $message .= ' '.rtrim(rtrim(number_format($moved, 2, ',', ''), '0'), ',').' uur vakantie in deze periode telt nu als ziekte.';
+                }
+            }
         }
 
         // Eén periode: direct door naar de vervangers. Meerdere losse periodes: het overzicht van deze medewerker.
@@ -146,6 +155,20 @@ class AbsenceController extends Controller
             ->values();
 
         return view('absences.show', compact('absence', 'openShifts'));
+    }
+
+    /** Verlofuren aanpassen (de schatting klopt niet, of er is iets afgesproken). */
+    public function updateHours(Request $request, Absence $absence): RedirectResponse
+    {
+        $data = $request->validate([
+            'hours' => ['required', 'numeric', 'min:0', 'max:9999'],
+            'days' => ['nullable', 'integer', 'min:0', 'max:999'],
+        ]);
+        $old = $absence->hoursLabel();
+        $absence->forceFill(['hours' => $data['hours'], 'days' => $data['days'] ?? $absence->days, 'hours_source' => 'handmatig'])->save();
+        Audit::log('absence.hours', "Verlofuren van {$absence->employee->name} aangepast: {$old} → {$absence->hoursLabel()}", $absence);
+
+        return back()->with('status', 'Uren bijgewerkt.');
     }
 
     public function reject(Absence $absence, AbsenceService $service): RedirectResponse

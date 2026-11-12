@@ -2,6 +2,7 @@
 <li class="flex flex-wrap items-start justify-between gap-2 px-4 py-2">
     <div>
         <span class="chip {{ $absence->chipClass() }}">{{ $absence->typeLabel() }}</span>
+        @if ($absence->hours > 0)<span class="text-xs text-gray-500">{{ $absence->hoursLabel() }}</span>@endif
         <span class="chip {{ match ($absence->status) { 'pending' => 'bg-amber-100 text-amber-800', 'rejected' => 'bg-red-100 text-red-800', default => 'bg-teal-50 text-teal-800' } }}">{{ $absence->statusLabel() }}</span>
         <span class="mt-0.5 block">{{ $absence->periodLabel() }}</span>
         @if ($absence->note)<span class="block text-xs text-gray-500">{{ $absence->note }}</span>@endif

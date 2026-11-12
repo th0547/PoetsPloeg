@@ -17,6 +17,7 @@
     </x-slot>
 
     <div x-data @shift-panel-closed.window="if ($event.detail.changed) window.location.reload()" class="max-w-4xl space-y-6">
+        @include('absences.partials.hours')
         @if ($absence->isPending())
             <div class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 <p class="font-medium">Dit verlof wordt pas goedgekeurd als er voor alle diensten een vervanger is.</p>

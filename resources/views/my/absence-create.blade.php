@@ -4,6 +4,7 @@
         'asRequest' => true,
         'days' => array_values(old('days', [])),
         'unplanned' => \App\Support\Policy::current()->directTypes(),
+        'shiftDays' => $shiftDays,
     ];
 @endphp
 <x-app-layout title="Verlof aanvragen">
@@ -37,6 +38,15 @@
         </div>
 
         @include('absences.partials.days-picker')
+        <p class="-mt-3 flex items-center gap-2 text-xs text-gray-600"><span class="inline-block h-2 w-2 rounded-full bg-orange-500"></span> Op deze dagen sta je ingepland: kies daar een verlofsoort. Op andere dagen kun je ook “Niet beschikbaar” doorgeven.</p>
+
+        @if ($errors->has('confirm_zero') || old('confirm_zero'))
+            <label class="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <input type="hidden" name="confirm_zero" value="0">
+                <input type="checkbox" name="confirm_zero" value="1" class="checkbox mt-0.5" @checked(old('confirm_zero'))>
+                <span>Ik wil toch verlof aanvragen voor deze dag(en), ook al werk ik dan normaal niet.</span>
+            </label>
+        @endif
 
         <div>
             <label class="label" for="note">Toelichting</label>
