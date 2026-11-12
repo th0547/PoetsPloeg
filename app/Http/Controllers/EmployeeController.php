@@ -6,9 +6,11 @@ use App\Models\AvailabilityPattern;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Skill;
+use App\Models\VacationBalance;
 use App\Services\Audit;
 use App\Services\AvailabilityEnforcer;
 use App\Services\EmployeeAccounts;
+use App\Services\LeaveCounters;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -124,6 +126,22 @@ class EmployeeController extends Controller
         return redirect()->route('employees.index')->with('status', 'Medewerker verwijderd.');
     }
 
+    /** Beginsaldo vakantie-uren van een jaar invullen (uit de loonadministratie). */
+    public function updateBalance(Request $request, Employee $employee): RedirectResponse
+    {
+        $data = $request->validate([
+            'year' => ['required', 'integer', 'between:2000,2100'],
+            'opening_hours' => ['required', 'numeric', 'between:-999,9999'],
+        ]);
+        VacationBalance::updateOrCreate(
+            ['employee_id' => $employee->id, 'year' => $data['year']],
+            ['opening_hours' => $data['opening_hours'], 'updated_by' => $request->user()->id],
+        );
+        Audit::log('balance.updated', "Beginsaldo vakantie {$data['year']} van {$employee->name}: {$data['opening_hours']} u", $employee);
+
+        return redirect()->route('employees.edit', [$employee, 'jaar' => $data['year']])->with('status', 'Beginsaldo opgeslagen.');
+    }
+
     private function form(Employee $employee): View
     {
         $employee->loadMissing(['skills', 'buildings', 'availabilityPatterns', 'user']);
@@ -138,6 +156,10 @@ class EmployeeController extends Controller
             // Lopende en geplande afwezigheid, en daaronder de volledige geschiedenis (nieuwste eerst).
             'absences' => $absences->where('ends_at', '>=', now())->values(),
             'absenceHistory' => $absences->where('ends_at', '<', now())->sortByDesc('starts_at')->values(),
+            // Verloftellers en indicatief saldo (issue #44).
+            'counterYear' => $year = (int) request()->integer('jaar', (int) now()->year),
+            'counters' => $employee->exists ? app(LeaveCounters::class)->counters($employee, $year) : collect(),
+            'balance' => $employee->exists ? app(LeaveCounters::class)->balance($employee, $year) : null,
         ]);
     }
 

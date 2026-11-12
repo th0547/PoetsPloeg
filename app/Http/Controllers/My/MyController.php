@@ -8,6 +8,7 @@ use App\Models\AvailabilityPattern;
 use App\Models\Employee;
 use App\Models\Shift;
 use App\Services\AbsenceService;
+use App\Services\LeaveCounters;
 use App\Services\LeaveHours;
 use App\Services\ShiftGenerator;
 use App\Support\Policy;
@@ -66,15 +67,38 @@ class MyController extends Controller
         ]);
     }
 
-    public function absences(Request $request): View
+    /** Statusfilter voor de geschiedenis. */
+    public const HISTORY_FILTERS = ['alle' => 'Alle', 'approved' => 'Goedgekeurd', 'pending' => 'In afwachting', 'rejected' => 'Afgewezen', 'ingetrokken' => 'Ingetrokken'];
+
+    public function absences(Request $request, LeaveCounters $counters): View
     {
         $employee = $this->employee($request);
+        $filters = $request->validate([
+            'status' => ['nullable', Rule::in(array_keys(self::HISTORY_FILTERS))],
+            'jaar' => ['nullable', 'integer', 'between:2000,2100'],
+        ]);
+        $status = $filters['status'] ?? 'alle';
+        $year = (int) ($filters['jaar'] ?? now()->year);
         $absences = $employee->absences()->get();
+
+        $history = Absence::withTrashed()->where('employee_id', $employee->id)
+            ->where('ends_at', '<', now()->startOfDay())
+            ->when($status === 'ingetrokken', fn ($q) => $q->onlyTrashed())
+            ->when(! in_array($status, ['alle', 'ingetrokken'], true), fn ($q) => $q->where('status', $status)->whereNull('deleted_at'))
+            ->when($filters['jaar'] ?? null, fn ($q) => $q->where('starts_at', '>=', CarbonImmutable::create($year, 1, 1))->where('starts_at', '<', CarbonImmutable::create($year + 1, 1, 1)))
+            ->orderByDesc('starts_at')
+            ->get();
 
         return view('my.absences', [
             'employee' => $employee,
             'current' => $absences->where('ends_at', '>=', now()->startOfDay())->values(),
-            'history' => $absences->where('ends_at', '<', now()->startOfDay())->sortByDesc('starts_at')->values(),
+            'history' => $history,
+            'status' => $status,
+            'year' => $year,
+            'yearFiltered' => isset($filters['jaar']),
+            'counters' => $counters->counters($employee, $year),
+            'balance' => $counters->balance($employee, $year),
+            'showBalance' => Policy::current()->get('vacation.show_balance_employees'),
         ]);
     }
 

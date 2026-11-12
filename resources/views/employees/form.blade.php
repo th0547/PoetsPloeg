@@ -182,6 +182,18 @@
                     </div>
                 </div>
 
+                <div class="card card-body space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-semibold text-gray-800">Verloftellers</h2>
+                        <span class="flex items-center gap-1 text-sm">
+                            <a href="{{ route('employees.edit', [$employee, 'jaar' => $counterYear - 1]) }}" class="text-teal-700 hover:underline" aria-label="Vorig jaar">‹</a>
+                            {{ $counterYear }}
+                            <a href="{{ route('employees.edit', [$employee, 'jaar' => $counterYear + 1]) }}" class="text-teal-700 hover:underline" aria-label="Volgend jaar">›</a>
+                        </span>
+                    </div>
+                    @include('partials.leave-counters', ['counters' => $counters, 'balance' => $balance, 'year' => $counterYear, 'showBalance' => true, 'balanceForm' => route('employees.balance', $employee)])
+                </div>
+
                 <div class="card card-body space-y-2">
                     <h2 class="font-semibold text-gray-800">Planning</h2>
                     <a href="{{ route('planning', ['view' => 'employee', 'range' => 'week']) }}" class="text-sm text-teal-700 hover:underline">Bekijk in de weekplanning</a>

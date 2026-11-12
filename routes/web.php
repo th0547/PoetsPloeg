@@ -42,6 +42,7 @@ Route::middleware(['auth', 'planner'])->group(function () {
 
     Route::resource('medewerkers', EmployeeController::class)
         ->parameters(['medewerkers' => 'employee'])->names('employees')->except('show');
+    Route::put('medewerkers/{employee}/beginsaldo', [EmployeeController::class, 'updateBalance'])->name('employees.balance');
     Route::post('medewerkers/{employee}/uitnodiging', [EmployeeController::class, 'resendInvitation'])
         ->middleware('throttle:10,1')->name('employees.invitation');
     Route::delete('medewerkers/{employee}/inlog', [EmployeeController::class, 'revokeAccount'])->name('employees.account.destroy');
@@ -74,6 +75,7 @@ Route::middleware(['auth', 'planner'])->group(function () {
     Route::resource('gebruikers', UserController::class)
         ->parameters(['gebruikers' => 'user'])->names('users')->except('show');
 
+    Route::get('afwezigheid/export', [AbsenceController::class, 'export'])->name('absences.export');
     Route::patch('afwezigheid/{absence}/uren', [AbsenceController::class, 'updateHours'])->name('absences.hours');
     Route::post('afwezigheid/{absence}/afwijzen', [AbsenceController::class, 'reject'])->name('absences.reject');
     Route::resource('afwezigheid', AbsenceController::class)
