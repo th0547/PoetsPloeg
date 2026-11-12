@@ -194,7 +194,8 @@ class Policy
     /** Soorten die een medewerker zelf kan aanvragen: [sleutel => naam]. */
     public function requestableTypes(): array
     {
-        return $this->leaveTypes(true)->filter(fn ($t) => $t['self_request'] && ! $t['direct'])->pluck('name', 'key')->all();
+        // Direct geregistreerde soorten alleen als ze op een vrije dag horen (Niet beschikbaar).
+        return $this->leaveTypes(true)->filter(fn ($t) => $t['self_request'] && (! $t['direct'] || $t['without_shift']))->pluck('name', 'key')->all();
     }
 
     public static function emptyLeaveType(): array

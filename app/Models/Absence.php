@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\LeaveHours;
 use App\Support\Policy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -26,7 +27,17 @@ class Absence extends Model
         'rejected' => 'Afgewezen',
     ];
 
-    protected $fillable = ['employee_id', 'type', 'status', 'starts_at', 'ends_at', 'note', 'decided_at'];
+    protected $fillable = ['employee_id', 'type', 'status', 'starts_at', 'ends_at', 'note', 'decided_at', 'hours', 'days', 'hours_source'];
+
+    protected static function booted(): void
+    {
+        // Verlofuren bepalen bij het aanmaken, vóórdat de medewerker van diensten wordt gehaald (issue #43).
+        static::creating(function (Absence $absence) {
+            if ($absence->hours === null) {
+                app(LeaveHours::class)->fill($absence);
+            }
+        });
+    }
 
     protected $attributes = ['status' => 'approved'];
 
@@ -36,6 +47,8 @@ class Absence extends Model
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'decided_at' => 'datetime',
+            'hours' => 'float',
+            'days' => 'integer',
         ];
     }
 
@@ -101,6 +114,16 @@ class Absence extends Model
 
         return $this->starts_at->translatedFormat('D j M Y').($wholeStart ? '' : ' '.$this->starts_at->format('H:i'))
             .' t/m '.$this->ends_at->translatedFormat('D j M Y').($wholeEnd ? '' : ' '.$this->ends_at->format('H:i'));
+    }
+
+    /** Uren als tekst, bijv. "8 u" of "–". */
+    public function hoursLabel(): string
+    {
+        if ($this->hours === null) {
+            return '–';
+        }
+
+        return rtrim(rtrim(number_format($this->hours, 2, ',', ''), '0'), ',').' u';
     }
 
     /** Kleur van het label in lijsten: ziekte rood, zorg blauw, kort verzuim oranje, niet beschikbaar grijs. */

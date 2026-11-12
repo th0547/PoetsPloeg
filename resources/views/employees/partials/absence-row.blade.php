@@ -2,6 +2,7 @@
 <li class="py-2">
     <a href="{{ route('absences.show', $absence) }}" class="block hover:text-teal-700">
         <span class="chip {{ $absence->chipClass() }}">{{ $absence->typeLabel() }}</span>
+        @if ($absence->hours > 0)<span class="text-xs text-gray-500">{{ $absence->hoursLabel() }}</span>@endif
         @if ($absence->status !== 'approved')
             <span class="chip {{ $absence->isPending() ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800' }}">{{ $absence->isPending() ? 'in afwachting' : 'afgewezen' }}</span>
         @endif

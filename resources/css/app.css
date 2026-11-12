@@ -56,3 +56,19 @@
 .avail-absent {
     background: repeating-linear-gradient(-45deg, rgba(209, 213, 219, 0.95), rgba(209, 213, 219, 0.95) 5px, rgba(243, 244, 246, 0.95) 5px, rgba(243, 244, 246, 0.95) 10px);
 }
+
+/* Verlof aanvragen: dag waarop je ingepland staat (oranje stip onder het getal) */
+.shift-day {
+    position: relative;
+}
+.shift-day::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 3px;
+    width: 5px;
+    height: 5px;
+    margin-left: -2.5px;
+    border-radius: 9999px;
+    background: #f97316;
+}

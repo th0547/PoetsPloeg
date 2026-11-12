@@ -38,7 +38,7 @@ export function mergePeriods(days) {
     return periods;
 }
 
-export default function absenceForm({ type = 'ziek', asRequest = false, days = [], unplanned = [] } = {}) {
+export default function absenceForm({ type = 'ziek', asRequest = false, days = [], unplanned = [], shiftDays = [] } = {}) {
     const initial = days
         .filter((d) => d && d.date)
         .map((d) => ({ date: d.date, start_time: d.start_time || DAY_START, end_time: d.end_time || DAY_END }))
@@ -49,6 +49,7 @@ export default function absenceForm({ type = 'ziek', asRequest = false, days = [
         type,
         asRequest,
         unplanned,
+        shiftDays: new Set(shiftDays),
         days: initial,
         month: firstOfMonth(start),
         today: iso(new Date()),
@@ -88,11 +89,13 @@ export default function absenceForm({ type = 'ziek', asRequest = false, days = [
         },
 
         dayClass(cell) {
+            // Dag met een dienst: oranje stip onder het getal (alleen bij Mijn verlof, shiftDays gevuld).
+            const shift = this.shiftDays.has(cell.iso) ? ' shift-day' : '';
             if (this.isSelected(cell.iso)) {
-                return 'bg-teal-600 font-semibold text-white hover:bg-teal-700';
+                return 'bg-teal-600 font-semibold text-white hover:bg-teal-700' + shift;
             }
             return (cell.weekend ? 'text-gray-400' : 'text-gray-800') + ' hover:bg-teal-50'
-                + (cell.iso === this.today ? ' ring-1 ring-inset ring-teal-500' : '');
+                + (cell.iso === this.today ? ' ring-1 ring-inset ring-teal-500' : '') + shift;
         },
 
         // --- Dagen kiezen ---
