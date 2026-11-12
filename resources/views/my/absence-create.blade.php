@@ -3,7 +3,7 @@
         'type' => old('type', 'verlof'),
         'asRequest' => true,
         'days' => array_values(old('days', [])),
-        'unplanned' => \App\Models\Absence::UNPLANNED,
+        'unplanned' => \App\Support\Policy::current()->directTypes(),
     ];
 @endphp
 <x-app-layout title="Verlof aanvragen">
@@ -22,8 +22,8 @@
         <div class="max-w-sm">
             <label class="label" for="type">Soort</label>
             <select id="type" name="type" class="input" x-model="type">
-                @foreach (\App\Models\Absence::TYPE_GROUPS as $group => $values)
-                    @php($values = array_values(array_intersect($values, array_keys($types))))
+                @foreach (\App\Support\Policy::current()->leaveTypeGroups() as $group => $groupTypes)
+                    @php($values = array_values(array_intersect(array_keys($groupTypes), array_keys($types))))
                     @if ($values)
                         <optgroup label="{{ $group }}">
                             @foreach ($values as $value)
@@ -33,7 +33,7 @@
                     @endif
                 @endforeach
             </select>
-            <p class="mt-1 text-xs text-gray-500">Ziek of een calamiteit? Meld dat direct bij je planner.</p>
+            <p class="mt-1 text-xs text-gray-500">Ziek of een calamiteit? Meld dat direct bij je planner. <a href="{{ route('my.policy') }}" class="text-teal-700 hover:underline">Welke regels gelden?</a></p>
         </div>
 
         @include('absences.partials.days-picker')

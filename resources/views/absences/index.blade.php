@@ -26,10 +26,10 @@
             <label class="label" for="f-soort">Soort</label>
             <select id="f-soort" name="soort" class="input">
                 <option value="">Alle soorten</option>
-                @foreach (\App\Models\Absence::TYPE_GROUPS as $group => $types)
+                @foreach (\App\Support\Policy::current()->leaveTypeGroups(false) as $group => $types)
                     <optgroup label="{{ $group }}">
-                        @foreach ($types as $value)
-                            <option value="{{ $value }}" @selected(($filters['soort'] ?? null) === $value)>{{ \App\Models\Absence::TYPES[$value] }}</option>
+                        @foreach ($types as $value => $name)
+                            <option value="{{ $value }}" @selected(($filters['soort'] ?? null) === $value)>{{ $name }}</option>
                         @endforeach
                     </optgroup>
                 @endforeach

@@ -3,7 +3,7 @@
         'type' => old('type', 'ziek'),
         'asRequest' => (bool) old('as_request', false),
         'days' => array_values(old('days', [])),
-        'unplanned' => \App\Models\Absence::UNPLANNED,
+        'unplanned' => \App\Support\Policy::current()->directTypes(),
     ];
 @endphp
 <x-app-layout title="Afwezigheid registreren">
@@ -33,10 +33,10 @@
             <div>
                 <label class="label" for="type">Soort</label>
                 <select id="type" name="type" class="input" x-model="type">
-                    @foreach (\App\Models\Absence::TYPE_GROUPS as $group => $types)
+                    @foreach (\App\Support\Policy::current()->leaveTypeGroups() as $group => $types)
                         <optgroup label="{{ $group }}">
-                            @foreach ($types as $value)
-                                <option value="{{ $value }}" @selected(old('type', 'ziek') === $value)>{{ \App\Models\Absence::TYPES[$value] }}</option>
+                            @foreach ($types as $value => $name)
+                                <option value="{{ $value }}" @selected(old('type', 'ziek') === $value)>{{ $name }}</option>
                             @endforeach
                         </optgroup>
                     @endforeach

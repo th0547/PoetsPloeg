@@ -112,9 +112,9 @@ class LeaveRequestTest extends TestCase
 
     public function test_request_keeps_its_leave_type_when_approved(): void
     {
-        $absence = $this->submit('verhuisdag');
-        $this->assertSame('verhuisdag', $absence->type);
-        $this->get(route('absences.show', $absence))->assertOk()->assertSee('Verzoek verhuisdag');
+        $absence = $this->submit('verjaardag');
+        $this->assertSame('verjaardag', $absence->type);
+        $this->get(route('absences.show', $absence))->assertOk()->assertSee('Verzoek verjaardagsverlof');
 
         [$bram, $cees] = Employee::factory()->count(2)->create();
         foreach ([[$this->first, $bram], [$this->second, $cees]] as [$shift, $replacement]) {
@@ -125,7 +125,7 @@ class LeaveRequestTest extends TestCase
 
         $absence->refresh();
         $this->assertSame('approved', $absence->status);
-        $this->assertSame('verhuisdag', $absence->type);
+        $this->assertSame('verjaardag', $absence->type);
     }
 
     public function test_sickness_is_never_a_request(): void

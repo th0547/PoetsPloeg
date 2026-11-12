@@ -13,6 +13,7 @@ use App\Http\Controllers\HelpController;
 use App\Http\Controllers\My\MyController;
 use App\Http\Controllers\OpenShiftController;
 use App\Http\Controllers\PlanningController;
+use App\Http\Controllers\PolicyController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SecurityTxtController;
 use App\Http\Controllers\ShiftController;
@@ -53,6 +54,10 @@ Route::middleware(['auth', 'planner'])->group(function () {
     Route::resource('panden.taken', TaskTemplateController::class)
         ->parameters(['panden' => 'building', 'taken' => 'template'])
         ->names('buildings.templates')->except(['index', 'show'])->scoped();
+
+    Route::get('beleid', [PolicyController::class, 'index'])->name('policy.index');
+    Route::put('beleid', [PolicyController::class, 'update'])->middleware('can:manage-policy')->name('policy.update');
+    Route::get('beleid/medewerkers', [PolicyController::class, 'preview'])->name('policy.preview');
 
     Route::get('logboek', [AuditLogController::class, 'index'])->middleware('can:view-audit-log')->name('audit-log');
 
@@ -98,6 +103,7 @@ Route::middleware(['auth', 'employee'])->prefix('mijn')->name('my.')->group(func
     Route::post('verlof', [MyController::class, 'storeAbsence'])->name('absences.store');
     Route::delete('verlof/{absence}', [MyController::class, 'destroyAbsence'])->name('absences.destroy');
     Route::get('beschikbaarheid', [MyController::class, 'availability'])->name('availability');
+    Route::get('beleid', [PolicyController::class, 'employee'])->name('policy');
     Route::put('beschikbaarheid', [MyController::class, 'updateAvailability'])->name('availability.update');
 });
 

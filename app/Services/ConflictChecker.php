@@ -6,6 +6,7 @@ use App\Models\Absence;
 use App\Models\Employee;
 use App\Models\Shift;
 use App\Models\Skill;
+use App\Support\Policy;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -223,6 +224,8 @@ class ConflictChecker
             ));
         }
 
+        array_push($warnings, ...$this->workingTimeWarnings($shift, $mine, $start, $end, $newWeekHours));
+
         return [
             'warnings' => $warnings,
             'checks' => [
@@ -239,6 +242,65 @@ class ConflictChecker
                 'contract_max' => $max,
             ],
         ];
+    }
+
+    /**
+     * Rusttijden en dienstduur volgens het beleid (issue #42: cao art. 14, Arbeidstijdenwet).
+     *
+     * @return list<array>
+     */
+    private function workingTimeWarnings(Shift $shift, Collection $mine, CarbonImmutable $start, CarbonImmutable $end, float $weekHours): array
+    {
+        $policy = Policy::at($start);
+        if (! $policy->get('roster.warn_in_planning')) {
+            return [];
+        }
+        $warnings = [];
+        $hours = $start->diffInMinutes($end) / 60;
+
+        $lawMax = $policy->get('roster.max_shift_hours_law');
+        if ($hours > $lawMax) {
+            $warnings[] = $this->warning('worktime', self::WARNING, sprintf('Dienst langer dan %s uur (Arbeidstijdenwet)', $this->num($lawMax)));
+        }
+        if ($policy->get('roster.shift_length_applies') === 'all') {
+            if ($hours < $policy->get('roster.shift_min_hours')) {
+                $warnings[] = $this->warning('worktime', self::INFO, sprintf('Korter dan %s uur (cao)', $this->num($policy->get('roster.shift_min_hours'))));
+            } elseif ($hours > $policy->get('roster.shift_max_hours') && $hours <= $lawMax) {
+                $warnings[] = $this->warning('worktime', self::WARNING, sprintf('Langer dan %s uur (cao)', $this->num($policy->get('roster.shift_max_hours'))));
+            }
+        }
+
+        $others = $mine->filter(fn ($a) => $a->shift_id !== $shift->id);
+        $previous = $others->filter(fn ($a) => $a->ends_at->lte($start))->sortByDesc(fn ($a) => $a->ends_at->getTimestamp())->first();
+        $next = $others->filter(fn ($a) => $a->starts_at->gte($end))->sortBy(fn ($a) => $a->starts_at->getTimestamp())->first();
+        $required = fn (CarbonImmutable $endsAt) => $this->isNightEnd($endsAt)
+            ? $policy->get('roster.rest_after_night_hours')
+            : $policy->get('roster.rest_daily_hours');
+        if ($previous && ($gap = $previous->ends_at->diffInMinutes($start) / 60) < $required($previous->ends_at)) {
+            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
+                'Rusttijd %s u na %s (%s); minimaal %s u', $this->num($gap), $previous->title, $previous->ends_at->format('d-m H:i'), $this->num($required($previous->ends_at)),
+            ));
+        }
+        if ($next && ($gap = $end->diffInMinutes($next->starts_at) / 60) < $required($end)) {
+            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
+                'Rusttijd %s u tot %s (%s); minimaal %s u', $this->num($gap), $next->title, $next->starts_at->format('d-m H:i'), $this->num($required($end)),
+            ));
+        }
+
+        $weekMax = $policy->get('roster.max_week_hours_law');
+        if ($weekHours > $weekMax) {
+            $warnings[] = $this->warning('worktime', self::WARNING, sprintf('Meer dan %s uur deze week (Arbeidstijdenwet)', $this->num($weekMax)));
+        }
+
+        return $warnings;
+    }
+
+    /** Nachtdienst die na 02:00 eindigt (Arbeidstijdenwet art. 5:8): eindtijd tussen 02:00 en 08:00. */
+    private function isNightEnd(CarbonImmutable $endsAt): bool
+    {
+        $minutes = $endsAt->hour * 60 + $endsAt->minute;
+
+        return $minutes > 120 && $minutes <= 480;
     }
 
     private function hoursInWeek(int $employeeId, CarbonImmutable $weekStart, ?int $excludeShiftId = null): float

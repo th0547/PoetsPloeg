@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\Shift;
 use App\Services\AbsenceService;
 use App\Services\ShiftGenerator;
+use App\Support\Policy;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -161,7 +162,7 @@ class MyController extends Controller
     /** Soorten die een medewerker zelf aanvraagt; ziek en calamiteit meld je direct bij de planner. */
     public static function requestableTypes(): array
     {
-        return collect(Absence::TYPES)->except(Absence::UNPLANNED)->all();
+        return Policy::current()->requestableTypes();
     }
 
     private function employee(Request $request): Employee

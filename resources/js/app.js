@@ -4,6 +4,7 @@ import Alpine from 'alpinejs';
 import absenceForm from './absence-form';
 import registerActions from './actions';
 import availabilityEditor from './availability';
+import policyForm from './policy';
 import recurrenceEditor, { aiPrompt, recurrencePlayground } from './recurrence';
 import shiftPanel, { openShift } from './shift-panel';
 
@@ -17,6 +18,7 @@ Alpine.data('absenceForm', absenceForm);
 Alpine.data('recurrenceEditor', recurrenceEditor);
 Alpine.data('recurrencePlayground', recurrencePlayground);
 Alpine.data('aiPrompt', aiPrompt);
+Alpine.data('policyForm', policyForm);
 
 // Pagina-specifieke modules (planning, kalender) registreren hun componenten eerst.
 document.addEventListener('DOMContentLoaded', () => Alpine.start());
