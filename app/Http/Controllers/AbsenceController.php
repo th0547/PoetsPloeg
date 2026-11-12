@@ -7,10 +7,12 @@ use App\Models\Employee;
 use App\Models\Shift;
 use App\Services\AbsenceService;
 use App\Services\Audit;
+use App\Services\LeaveCounters;
 use App\Services\LeaveHours;
 use App\Support\Policy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -155,6 +157,18 @@ class AbsenceController extends Controller
             ->values();
 
         return view('absences.show', compact('absence', 'openShifts'));
+    }
+
+    /** CSV per medewerker per soort voor de loonadministratie (issue #44). */
+    public function export(Request $request, LeaveCounters $counters): Response
+    {
+        $year = (int) $request->integer('jaar', (int) now()->year);
+        Audit::log('absences.exported', "Verloftellers {$year} geëxporteerd (CSV)");
+
+        return response($counters->csv($year), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"verlof-{$year}.csv\"",
+        ]);
     }
 
     /** Verlofuren aanpassen (de schatting klopt niet, of er is iets afgesproken). */

@@ -6,6 +6,7 @@
     <x-slot name="header">
         <h1 class="page-title">Verlof, ziekte &amp; uitval</h1>
         <div class="flex flex-wrap gap-2">
+            <a href="{{ route('absences.export', ['jaar' => now()->year]) }}" class="btn-secondary" title="Uren en dagen per medewerker per soort, voor de loonadministratie">Export {{ now()->year }} (CSV)</a>
             <a href="{{ route('absences.index', ['status' => 'pending']) }}" class="btn-secondary">Openstaande verzoeken</a>
             <a href="{{ route('absences.create') }}" class="btn">+ Afwezigheid / uitval</a>
         </div>
