@@ -15,3 +15,5 @@ storage/framework/*/*
 storage/app/*
 database/database.sqlite
 *.log
+# Bronnen (cao, wetteksten) zijn naslag voor ontwikkelaars, niet nodig in de image.
+docs/bronnen
