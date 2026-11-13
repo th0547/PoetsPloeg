@@ -5,6 +5,7 @@
  * De logica is gelijk aan AvailabilityPattern::occursOn() en AvailabilitySchedule::windowsOn() in PHP.
  */
 
+import gridEditor from './availability-grid';
 import { addDays, daysBetween, floorMod, formatDate, isoDate, isoWeekday, minutes, mondayOf, parseDate } from './dates';
 
 export const REPEATS = {
@@ -50,8 +51,11 @@ const span = (w) => {
     return [s, e];
 };
 
-export default function availabilityEditor(initial = [], absences = [], days = []) {
+export default function availabilityEditor(initial = [], absences = [], days = [], contract = null) {
     return {
+        // Proef "nieuwe invoer": hetzelfde patroon en dezelfde afwijkende dagen, in een rooster waarin je sleept.
+        ...gridEditor({ occursOn, dayWindows, contract }),
+
         patterns: initial.map((p) => ({ repeat: 'w1', starts_on: null, valid_from: null, valid_until: null, note: '', ...p, showPeriod: !!(p.valid_from || p.valid_until) })),
         dayRules: days.map((d) => ({ note: '', slots: [], past: false, ...d })),
         copyUntil: '',
