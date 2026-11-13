@@ -15,7 +15,7 @@ class ReleaseUnavailable extends Command
     public function handle(AvailabilityEnforcer $enforcer): int
     {
         $total = 0;
-        foreach (Employee::has('availabilityPatterns')->with('availabilityPatterns')->get() as $employee) {
+        foreach (Employee::where(fn ($q) => $q->has('availabilityPatterns')->orHas('availabilityDays'))->with(['availabilityPatterns', 'availabilityDays'])->get() as $employee) {
             $released = $enforcer->release($employee);
             foreach ($released as $shift) {
                 $this->line(sprintf('%s: %s %s · %s', $employee->name, $shift->starts_at->format('d-m H:i'), $shift->building->name, $shift->title));

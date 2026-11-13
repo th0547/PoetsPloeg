@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AvailabilityDay;
 use App\Models\AvailabilityPattern;
 use App\Models\Building;
 use App\Models\Employee;
@@ -11,6 +12,7 @@ use App\Services\Audit;
 use App\Services\AvailabilityEnforcer;
 use App\Services\EmployeeAccounts;
 use App\Services\LeaveCounters;
+use App\Services\WeekAvailability;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -144,7 +146,7 @@ class EmployeeController extends Controller
 
     private function form(Employee $employee): View
     {
-        $employee->loadMissing(['skills', 'buildings', 'availabilityPatterns', 'user']);
+        $employee->loadMissing(['skills', 'buildings', 'availabilityPatterns', 'availabilityDays', 'user']);
         $absences = $employee->exists ? $employee->absences()->get() : collect();
 
         return view('employees.form', [
@@ -152,6 +154,7 @@ class EmployeeController extends Controller
             'skills' => Skill::orderBy('name')->get(),
             'buildings' => Building::orderBy('name')->get(),
             'patterns' => old('patterns', $employee->availabilityRows()),
+            'availabilityDays' => $employee->availabilityDayRowsWithOld(),
             'absenceBlocks' => $employee->absenceBlocks($absences),
             // Lopende en geplande afwezigheid, en daaronder de volledige geschiedenis (nieuwste eerst).
             'absences' => $absences->where('ends_at', '>=', now())->values(),
@@ -186,7 +189,9 @@ class EmployeeController extends Controller
             'buildings' => ['array'],
             'buildings.*' => ['exists:buildings,id'],
             ...AvailabilityPattern::rules(),
+            ...AvailabilityDay::rules(),
         ], [
+            ...AvailabilityDay::messages(),
             'email.required' => 'Vul een e-mailadres in: daarmee logt de medewerker in.',
             'email.unique' => 'Dit e-mailadres is al in gebruik door een ander account.',
         ], [
@@ -194,13 +199,16 @@ class EmployeeController extends Controller
             'contract_hours_min' => 'min. contracturen',
         ]);
 
-        $employee->fill(collect($data)->except(['skills', 'buildings', 'patterns', 'invite'])->all());
+        $employee->fill(collect($data)->except(['skills', 'buildings', 'patterns', 'days', 'invite'])->all());
         $employee->active = $request->boolean('active');
         $employee->save();
 
         $employee->skills()->sync($data['skills'] ?? []);
         $employee->buildings()->sync($data['buildings'] ?? []);
-        $employee->replaceAvailability($data['patterns'] ?? []);
+        $employee->replaceAvailability($data['patterns'] ?? [], $request->boolean('days_form') ? ($data['days'] ?? []) : null);
+        if ($employee->wasRecentlyCreated === false) {
+            app(WeekAvailability::class)->afterChange($employee);
+        }
 
         return $employee;
     }

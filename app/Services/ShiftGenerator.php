@@ -44,7 +44,7 @@ class ShiftGenerator
         if ($templates->isEmpty()) {
             return 0;
         }
-        $templates->load(['patterns', 'skills:id', 'employees' => fn ($q) => $q->where('active', true)->with('availabilityPatterns')]);
+        $templates->load(['patterns', 'skills:id', 'employees' => fn ($q) => $q->where('active', true)->with(['availabilityPatterns', 'availabilityDays'])]);
 
         // Wat er al staat: per patroon per dag, en per taak per dag en begintijd (twee patronen op
         // dezelfde dag en tijd geven één dienst). Geannuleerde diensten tellen mee: die blijven weg.
@@ -169,7 +169,7 @@ class ShiftGenerator
             $isAbsent = ($absences[$employee->id] ?? collect())->contains(
                 fn (Absence $a) => $a->starts_at->lt($endsAt) && $a->ends_at->gt($startsAt)
             );
-            if ($isAbsent || AvailabilityCheck::isOutside($employee->availabilityPatterns, $startsAt, $endsAt)) {
+            if ($isAbsent || AvailabilityCheck::isOutside($employee, $startsAt, $endsAt)) {
                 continue;
             }
             $shift->assignments()->create(['employee_id' => $employee->id, 'source' => 'fixed']);

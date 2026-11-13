@@ -4,6 +4,7 @@ namespace App\Http\Controllers\My;
 
 use App\Http\Controllers\Controller;
 use App\Models\Absence;
+use App\Models\AvailabilityDay;
 use App\Models\AvailabilityPattern;
 use App\Models\AvailabilityWeek;
 use App\Models\Employee;
@@ -218,13 +219,14 @@ class MyController extends Controller
 
     public function availability(Request $request, WeekAvailability $weeks): View
     {
-        $employee = $this->employee($request)->load('availabilityPatterns');
+        $employee = $this->employee($request)->load(['availabilityPatterns', 'availabilityDays']);
         $policy = Policy::current();
         $rows = AvailabilityWeek::where('employee_id', $employee->id)->get()->keyBy(fn ($w) => $w->week_start->toDateString());
 
         return view('my.availability', [
             'employee' => $employee,
             'patterns' => old('patterns', $employee->availabilityRows()),
+            'availabilityDays' => $employee->availabilityDayRowsWithOld(),
             'absenceBlocks' => $employee->absenceBlocks(),
             'confirmEnabled' => $policy->get('availability.confirm_weekly'),
             'otherEmployerField' => $policy->get('availability.other_employer_field'),
@@ -278,14 +280,22 @@ class MyController extends Controller
     public function updateAvailability(Request $request): RedirectResponse
     {
         $employee = $this->employee($request);
-        $data = $request->validate(AvailabilityPattern::rules());
+        $data = $request->validate([...AvailabilityPattern::rules(), ...AvailabilityDay::rules()], AvailabilityDay::messages());
+        $days = $request->boolean('days_form') ? ($data['days'] ?? []) : null;
+        $weeks = app(WeekAvailability::class);
 
-        // Bevestigde weken (issue #45): vergrendeld = niet meer wijzigen, anders bijwerken/markeren.
-        if (Policy::current()->get('availability.after_confirm') === 'locked' && app(WeekAvailability::class)->confirmedFuture($employee)->isNotEmpty()) {
-            throw ValidationException::withMessages(['patterns' => 'Je hebt al weken bevestigd. Vraag je planner om je beschikbaarheid te wijzigen.']);
-        }
-        DB::transaction(fn () => $employee->replaceAvailability($data['patterns'] ?? []));
-        app(WeekAvailability::class)->afterChange($employee);
+        // Bevestigde weken (issue #45): vergrendeld = die weken mogen niet veranderen, anders bijwerken/markeren.
+        $locked = Policy::current()->get('availability.after_confirm') === 'locked'
+            ? $weeks->confirmedFuture($employee)->map(fn ($w) => CarbonImmutable::instance($w->week_start))->all() : [];
+        DB::transaction(function () use ($employee, $data, $days, $weeks, $locked) {
+            $before = $locked ? $weeks->fingerprint($employee, $locked) : null;
+            $employee->replaceAvailability($data['patterns'] ?? [], $days);
+            if ($locked && $weeks->fingerprint($employee, $locked) !== $before) {
+                throw ValidationException::withMessages(['patterns' => 'Dit raakt een week die je al hebt bevestigd ('
+                    .collect($locked)->map(fn ($w) => 'week '.$w->isoWeek())->implode(', ').'). Vraag je planner om die week te wijzigen.']);
+            }
+        });
+        $weeks->afterChange($employee);
 
         return redirect()->route('my.availability')->with('status',
             'Je beschikbaarheid is opgeslagen. Diensten waarvoor je al bent ingepland blijven staan; heb je daar een probleem mee, overleg dan met je planner.');

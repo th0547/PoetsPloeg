@@ -43,9 +43,7 @@ class WeekAvailability
     /** Beschikbare uren in de week die op $weekStart (maandag) begint. */
     public function hours(Employee $employee, CarbonImmutable $weekStart): float
     {
-        $employee->loadMissing('availabilityPatterns');
-        $patterns = $employee->availabilityPatterns;
-        $hasAvailable = $patterns->where('type', 'available')->isNotEmpty();
+        $schedule = $employee->availabilitySchedule();
         $absences = Absence::query()->effective()
             ->where('employee_id', $employee->id)
             ->where('starts_at', '<', $weekStart->addWeek())
@@ -55,20 +53,8 @@ class WeekAvailability
         $minutes = 0;
         for ($d = 0; $d < 7; $d++) {
             $day = $weekStart->addDays($d);
-            // Minuut-voor-minuut: begin met alles (geen voorkeur) of niets (alleen "kan wel" telt).
-            $free = array_fill(0, 1440, ! $hasAvailable);
-            foreach (['available' => true, 'unavailable' => false] as $type => $value) {
-                foreach ($patterns->where('type', $type) as $p) {
-                    if (! $p->occursOn($day)) {
-                        continue;
-                    }
-                    [$from, $to] = [$this->minutes($p->start_time), $this->minutes($p->end_time)];
-                    $to = $to <= $from ? 1440 : $to;
-                    for ($m = $from; $m < $to; $m++) {
-                        $free[$m] = $value;
-                    }
-                }
-            }
+            // Minuut-voor-minuut: weekpatroon of losse datum, daarna gaat afwezigheid eraf.
+            $free = $schedule->freeMinutes($day);
             foreach ($absences as $absence) {
                 $from = max(0, (int) $day->diffInMinutes($absence->starts_at, false));
                 $to = min(1440, (int) $day->diffInMinutes($absence->ends_at, false) + 1);
@@ -80,6 +66,26 @@ class WeekAvailability
         }
 
         return round($minutes / 60, 2);
+    }
+
+    /**
+     * Vingerafdruk van de beschikbaarheid in deze weken (per minuut, zonder afwezigheid), om te zien of een
+     * wijziging bevestigde weken raakt.
+     *
+     * @param  iterable<\DateTimeInterface>  $weekStarts
+     */
+    public function fingerprint(Employee $employee, iterable $weekStarts): string
+    {
+        $employee->unsetRelation('availabilityPatterns')->unsetRelation('availabilityDays');
+        $schedule = $employee->availabilitySchedule();
+        $parts = [];
+        foreach ($weekStarts as $start) {
+            for ($d = 0; $d < 7; $d++) {
+                $parts[] = implode('', array_map('intval', $schedule->freeMinutes(CarbonImmutable::instance($start)->addDays($d))));
+            }
+        }
+
+        return md5(implode('/', $parts));
     }
 
     /** Waarschuwing nodig: beschikbaar onder de (minimale) contracturen? */
@@ -98,7 +104,7 @@ class WeekAvailability
     public function afterChange(Employee $employee): void
     {
         $mode = Policy::current()->get('availability.after_confirm');
-        $employee->unsetRelation('availabilityPatterns');
+        $employee->unsetRelation('availabilityPatterns')->unsetRelation('availabilityDays');
         foreach ($this->confirmedFuture($employee) as $week) {
             $hours = $this->hours($employee, CarbonImmutable::instance($week->week_start));
             if (abs($hours - (float) $week->available_hours) < 0.01) {
@@ -116,12 +122,5 @@ class WeekAvailability
             ->whereDate('week_start', '>=', CarbonImmutable::today()->startOfWeek())
             ->orderBy('week_start')
             ->get();
-    }
-
-    private function minutes(string $time): int
-    {
-        [$h, $m] = array_map('intval', explode(':', $time));
-
-        return min(1440, $h * 60 + $m);
     }
 }

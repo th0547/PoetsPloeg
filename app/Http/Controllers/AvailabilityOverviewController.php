@@ -21,7 +21,7 @@ class AvailabilityOverviewController extends Controller
     {
         $weeks = WeekAvailability::weeks();
         $policy = Policy::current();
-        $employees = Employee::active()->with(['user', 'availabilityPatterns'])->orderBy('name')->get();
+        $employees = Employee::active()->with(['user', 'availabilityPatterns', 'availabilityDays'])->orderBy('name')->get();
         $rows = AvailabilityWeek::whereIn('employee_id', $employees->pluck('id'))
             ->whereDate('week_start', '>=', $weeks->first())
             ->get()

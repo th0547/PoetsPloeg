@@ -1,8 +1,8 @@
 /**
- * Vaste (terugkerende) beschikbaarheid van een medewerker: een weekoverzicht met balken en daaronder de
- * tijdvakken (kan wel / kan niet, met herhaling). Afwezigheid in de gekozen week wordt er overheen getoond,
- * omdat die altijd vóór het vaste patroon gaat.
- * De herhalingslogica is gelijk aan AvailabilityPattern::occursOn() in PHP.
+ * Beschikbaarheid van een medewerker: een weekoverzicht met balken, daaronder het weekpatroon (kan wel /
+ * kan niet, met herhaling en eventueel een periode) en de afwijkende dagen. Een afwijkende dag vervangt
+ * die dag het weekpatroon. Afwezigheid in de gekozen week wordt er overheen getoond, die gaat altijd vóór.
+ * De logica is gelijk aan AvailabilityPattern::occursOn() en AvailabilitySchedule::windowsOn() in PHP.
  */
 
 import { addDays, daysBetween, floorMod, formatDate, isoDate, isoWeekday, minutes, mondayOf, parseDate } from './dates';
@@ -17,7 +17,14 @@ export const REPEATS = {
     d3: { unit: 'day', every: 3 },
 };
 
+/** Valt de datum binnen de periode (geldig van / t/m) van het tijdvak? */
+export function coversDate(p, date) {
+    const iso = isoDate(date);
+    return (!p.valid_from || p.valid_from <= iso) && (!p.valid_until || p.valid_until >= iso);
+}
+
 export function occursOn(p, date) {
+    if (!coversDate(p, date)) return false;
     const { unit, every } = REPEATS[p.repeat] ?? REPEATS.w1;
     const anchor = p.starts_on ? parseDate(p.starts_on) : null;
     if (unit === 'day') {
@@ -28,12 +35,30 @@ export function occursOn(p, date) {
     return floorMod(Math.round(daysBetween(mondayOf(anchor), mondayOf(date)) / 7), every) === 0;
 }
 
-export default function availabilityEditor(initial = [], absences = []) {
+/** Tijdvakken van een afwijkende dag, zoals AvailabilityDay::rowsFromForm() in PHP. */
+export function dayWindows(rule) {
+    if (rule.mode === 'unavailable_all') return [{ type: 'unavailable', start_time: '00:00', end_time: '00:00', note: rule.note }];
+    if (rule.mode === 'available_all') return [{ type: 'available', start_time: '00:00', end_time: '00:00', note: rule.note }];
+    if (rule.mode === 'slots') return rule.slots.filter((s) => s.start_time && s.end_time);
+    return [];
+}
+
+const span = (w) => {
+    const s = minutes(w.start_time);
+    let e = minutes(w.end_time);
+    if (e <= s) e = 24 * 60;
+    return [s, e];
+};
+
+export default function availabilityEditor(initial = [], absences = [], days = []) {
     return {
-        patterns: initial.map((p) => ({ repeat: 'w1', starts_on: null, note: '', ...p })),
+        patterns: initial.map((p) => ({ repeat: 'w1', starts_on: null, valid_from: null, valid_until: null, note: '', ...p, showPeriod: !!(p.valid_from || p.valid_until) })),
+        dayRules: days.map((d) => ({ note: '', slots: [], past: false, ...d })),
+        copyUntil: '',
         absences,
         weekStart: mondayOf(new Date()),
         highlight: null,
+        highlightDay: null,
 
         init() {
             this.sort();
@@ -62,15 +87,106 @@ export default function availabilityEditor(initial = [], absences = []) {
         /** Laat even zien welke regel bij een balk in het weekoverzicht hoort. */
         focus(i) {
             this.highlight = i;
-            this.$nextTick(() => this.$root.querySelector(`[data-pattern="${i}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+            this.$nextTick(() => document.querySelector(`[data-pattern="${i}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
             clearTimeout(this.highlightTimer);
             this.highlightTimer = setTimeout(() => { this.highlight = null; }, 2500);
         },
 
-        /** Wat geldt er buiten de ingevulde tijdvakken? Gelijk aan AvailabilityCheck::evaluate() in PHP. */
+        /** Wat geldt er in het algemeen buiten de ingevulde tijdvakken van het weekpatroon? */
         restIs() {
             if (!this.patterns.length) return 'none';
             return this.patterns.some((p) => p.type === 'available') ? 'unavailable' : 'available';
+        },
+
+        /** Wat geldt er op deze dag buiten de tijdvakken? Gelijk aan AvailabilitySchedule::windowsOn() in PHP. */
+        restOn(day) {
+            const rule = this.dayRule(day);
+            if (rule) return dayWindows(rule).some((w) => w.type === 'available') ? 'unavailable' : 'available';
+            if (!this.patterns.length && !this.dayRules.length) return 'none';
+            return this.patterns.some((p) => p.type === 'available' && coversDate(p, day)) ? 'unavailable' : 'available';
+        },
+
+        periodLabel(p) {
+            const f = (s) => formatDate(parseDate(s), { day: 'numeric', month: 'short', year: 'numeric' });
+            if (p.valid_from && p.valid_until) return `van ${f(p.valid_from)} t/m ${f(p.valid_until)}`;
+            if (p.valid_from) return `vanaf ${f(p.valid_from)}`;
+            if (p.valid_until) return `t/m ${f(p.valid_until)}`;
+            return '';
+        },
+
+        // --- Afwijkende dagen ---
+
+        dayRule(day) {
+            const iso = isoDate(day);
+            return this.dayRules.find((d) => d.date === iso) ?? null;
+        },
+
+        isPast(day) {
+            return isoDate(day) < isoDate(new Date());
+        },
+
+        /** Bewerkbare afwijkende dagen (vandaag en later), op datum. */
+        editableDays() {
+            const today = isoDate(new Date());
+            return this.dayRules.filter((d) => d.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+        },
+
+        dayTitle(rule) {
+            return formatDate(parseDate(rule.date), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        },
+
+        /** "Deze dag anders": begin met wat het patroon die dag zegt, zodat je alleen hoeft aan te passen. */
+        editDay(day) {
+            if (this.isPast(day)) return;
+            let rule = this.dayRule(day);
+            if (!rule) {
+                const slots = this.patterns.filter((p) => p.start_time && p.end_time && occursOn(p, day))
+                    .map((p) => ({ type: p.type, start_time: p.start_time, end_time: p.end_time, note: p.note || '' }));
+                rule = { date: isoDate(day), mode: 'slots', note: '', past: false, slots: slots.length ? slots : [{ type: 'available', start_time: '17:00', end_time: '22:00', note: '' }] };
+                this.dayRules.push(rule);
+            }
+            this.focusDay(rule.date);
+        },
+
+        resetDay(date) {
+            this.dayRules = this.dayRules.filter((d) => d.date !== date);
+        },
+
+        addSlot(rule, type) {
+            rule.slots.push(type === 'unavailable'
+                ? { type, start_time: '08:00', end_time: '15:00', note: '' }
+                : { type, start_time: '17:00', end_time: '22:00', note: '' });
+        },
+
+        modeChanged(rule) {
+            if (rule.mode === 'slots' && !rule.slots.length) this.addSlot(rule, 'available');
+        },
+
+        focusDay(date) {
+            this.highlightDay = date;
+            this.$nextTick(() => document.querySelector(`[data-day="${date}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+            clearTimeout(this.highlightDayTimer);
+            this.highlightDayTimer = setTimeout(() => { this.highlightDay = null; }, 2500);
+        },
+
+        weekHasDayRules() {
+            return this.days().some((d) => this.dayRule(d) && !this.isPast(d));
+        },
+
+        /** Kopieer de afwijkende dagen van de getoonde week naar de volgende week, of elke week t/m copyUntil. */
+        copyWeek() {
+            const source = this.days().map((d) => this.dayRule(d)).filter((r) => r && !r.past);
+            if (!source.length) return;
+            const last = this.copyUntil ? parseDate(this.copyUntil) : addDays(this.weekStart, 13);
+            const limit = addDays(new Date(), 366);
+            for (let w = 1; w <= 53; w++) {
+                const copies = source.map((r) => ({ ...r, slots: r.slots.map((s) => ({ ...s })), date: isoDate(addDays(parseDate(r.date), 7 * w)) }));
+                if (parseDate(copies[0].date) > last || parseDate(copies[0].date) > limit) break;
+                copies.forEach((c) => {
+                    if (parseDate(c.date) > last || parseDate(c.date) > limit) return;
+                    this.dayRules = this.dayRules.filter((d) => d.date !== c.date).concat([c]);
+                });
+            }
         },
 
         /** Herhaling gewijzigd: zorg voor een startdatum als die nodig is. */
@@ -119,6 +235,10 @@ export default function availabilityEditor(initial = [], absences = []) {
             return `${formatDate(this.weekStart, { day: 'numeric', month: 'short' })} – ${formatDate(end, { day: 'numeric', month: 'short', year: 'numeric' })}`;
         },
 
+        weekStartIso(weeks = 0) {
+            return isoDate(addDays(this.weekStart, 7 * weeks));
+        },
+
         isThisWeek() {
             return isoDate(this.weekStart) === isoDate(mondayOf(new Date()));
         },
@@ -139,10 +259,9 @@ export default function availabilityEditor(initial = [], absences = []) {
         hours() {
             let from = 6;
             let to = 22;
-            this.patterns.forEach((p) => {
-                const s = minutes(p.start_time);
-                let e = minutes(p.end_time);
-                if (e <= s) e = 24 * 60;
+            const all = [...this.patterns, ...this.dayRules.flatMap((d) => (d.mode === 'slots' ? d.slots : []))];
+            all.filter((p) => p.start_time && p.end_time).forEach((p) => {
+                const [s, e] = span(p);
                 from = Math.min(from, Math.floor(s / 60));
                 to = Math.max(to, Math.ceil(e / 60));
             });
@@ -169,8 +288,24 @@ export default function availabilityEditor(initial = [], absences = []) {
             return `left:${((s - from * 60) / span) * 100}%;width:${((e - s) / span) * 100}%`;
         },
 
-        /** De tijdvakken die op deze dag gelden. */
+        /** De tijdvakken die op deze dag gelden: die van de afwijkende dag, anders die van het weekpatroon. */
         blocks(day) {
+            const rule = this.dayRule(day);
+            if (rule) {
+                return dayWindows(rule).map((w, i) => {
+                    const [s, e] = span(w);
+                    const whole = s === 0 && e === 24 * 60;
+                    const text = whole ? (w.type === 'unavailable' ? 'Hele dag niet' : 'Hele dag wel') : `${w.start_time}–${w.end_time}`;
+                    return {
+                        index: `d${i}`,
+                        specific: true,
+                        type: w.type,
+                        label: `${text}${w.note ? ' · ' + w.note : ''}`,
+                        title: `Alleen deze dag: ${w.type === 'unavailable' ? 'kan niet' : 'kan wel'} ${text}${w.note ? ' · ' + w.note : ''}`,
+                        style: this.place(s, e),
+                    };
+                }).filter((b) => b.style);
+            }
             return this.patterns
                 .map((p, index) => ({ p, index }))
                 .filter(({ p }) => p.start_time && p.end_time && occursOn(p, day))
@@ -181,9 +316,10 @@ export default function availabilityEditor(initial = [], absences = []) {
                     const repeat = (REPEATS[p.repeat] ?? REPEATS.w1).every > 1 ? ' (niet elke week)' : '';
                     return {
                         index,
+                        specific: false,
                         type: p.type,
                         label: `${p.start_time}–${p.end_time}${p.note ? ' · ' + p.note : ''}`,
-                        title: `${p.type === 'unavailable' ? 'Kan niet' : 'Kan wel'} ${p.start_time}–${p.end_time}${p.note ? ' · ' + p.note : ''}${repeat}`,
+                        title: `${p.type === 'unavailable' ? 'Kan niet' : 'Kan wel'} ${p.start_time}–${p.end_time}${p.note ? ' · ' + p.note : ''}${repeat}${this.periodLabel(p) ? ' (' + this.periodLabel(p) + ')' : ''}`,
                         style: this.place(s, e),
                     };
                 })

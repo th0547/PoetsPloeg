@@ -3,79 +3,110 @@
 namespace App\Services;
 
 use App\Models\AvailabilityPattern;
+use App\Models\Employee;
+use App\Support\AvailabilitySchedule;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
 /**
- * Toetst een tijdvak aan het weekpatroon (kan wel / kan niet) van een medewerker.
+ * Toetst een tijdvak aan de beschikbaarheid (weekpatroon en losse datums) van een medewerker.
  */
 class AvailabilityCheck
 {
     /**
      * - 'blocked': de dienst valt (deels) in een "kan niet"-tijdvak (bijv. school);
-     * - 'ok': binnen een "kan wel"-tijdvak, of er zijn alleen "kan niet"-tijdvakken en die raken de dienst niet;
-     * - 'fail': er zijn "kan wel"-tijdvakken, maar de dienst valt daar buiten;
-     * - 'none': er is geen weekpatroon ingevuld.
+     * - 'ok': de dienst valt helemaal binnen beschikbare tijd;
+     * - 'fail': er zijn "kan wel"-tijdvakken, maar de dienst valt (deels) daarbuiten;
+     * - 'none': er is niets ingevuld.
      *
-     * @param  Collection<int, AvailabilityPattern>  $patterns
+     * @param  AvailabilitySchedule|Employee|Collection<int, AvailabilityPattern>  $availability
      * @return array{0: string, 1: ?string} [status, omschrijving van het blokkerende tijdvak]
      */
-    public static function evaluate(Collection $patterns, \DateTimeInterface $start, \DateTimeInterface $end): array
+    public static function evaluate(AvailabilitySchedule|Employee|Collection $availability, \DateTimeInterface $start, \DateTimeInterface $end): array
     {
-        if ($patterns->isEmpty()) {
+        $schedule = self::schedule($availability);
+        if ($schedule->isEmpty()) {
             return ['none', null];
         }
 
         $start = CarbonImmutable::instance($start);
         $end = CarbonImmutable::instance($end);
         $startDay = $start->startOfDay();
-        $nextDay = $startDay->addDay();
         $startMin = $start->hour * 60 + $start->minute;
         $endMin = $startMin + (int) $start->diffInMinutes($end);
 
-        // Tijdvakken als minuten vanaf middernacht van de begindag; een dienst over middernacht raakt ook de volgende dag.
-        $windows = fn (string $type) => $patterns->where('type', $type)
-            ->flatMap(function ($p) use ($startDay, $nextDay) {
-                $pStart = self::minutes($p->start_time);
-                $pEnd = self::minutes($p->end_time);
-                if ($pEnd <= $pStart) {
-                    $pEnd += 1440; // tot middernacht of later
+        // Alles in minuten vanaf middernacht van de begindag. De vorige dag telt mee voor tijdvakken over
+        // middernacht; een dienst over middernacht raakt ook de volgende dag(en).
+        $available = [];
+        $rest = [];
+        for ($offset = -1; $offset * 1440 < $endMin; $offset++) {
+            $day = $startDay->addDays($offset);
+            $info = $schedule->windowsOn($day);
+            $rest[$offset] = $info['rest'];
+            foreach ($info['windows'] as $w) {
+                $from = $w['from'] + $offset * 1440;
+                $to = $w['to'] + $offset * 1440;
+                if ($w['type'] === 'unavailable' && $from < $endMin && $to > $startMin) {
+                    return ['blocked', trim(($w['note'] ?: 'kan niet').' ('.self::time($w['from']).'–'.self::time($w['to']).')')];
                 }
-                $result = [];
-                if ($p->occursOn($startDay)) {
-                    $result[] = [$pStart, $pEnd, $p];
+                if ($w['type'] === 'available') {
+                    $available[] = [$from, $to];
                 }
-                if ($p->occursOn($nextDay)) {
-                    $result[] = [$pStart + 1440, $pEnd + 1440, $p];
-                }
-
-                return $result;
-            });
-
-        $blocking = $windows('unavailable')->first(fn ($w) => $w[0] < $endMin && $w[1] > $startMin);
-        if ($blocking) {
-            $p = $blocking[2];
-
-            return ['blocked', trim(($p->note ?: 'kan niet').' ('.substr($p->start_time, 0, 5).'–'.substr($p->end_time, 0, 5).')')];
+            }
         }
 
-        if ($patterns->where('type', 'available')->isEmpty()) {
-            return ['ok', null];
+        // Elk stuk van de dienst moet op een dag met "rest beschikbaar" vallen, of binnen "kan wel".
+        for ($offset = 0; $offset * 1440 < $endMin; $offset++) {
+            if ($rest[$offset] === 'available') {
+                continue;
+            }
+            $from = max($startMin, $offset * 1440);
+            $to = min($endMin, ($offset + 1) * 1440);
+            if (! self::covered($available, $from, $to)) {
+                return ['fail', null];
+            }
         }
 
-        return $windows('available')->contains(fn ($w) => $w[0] <= $startMin && $w[1] >= $endMin) ? ['ok', null] : ['fail', null];
+        return ['ok', null];
     }
 
     /** Valt de dienst buiten de beschikbaarheid ("kan niet" of buiten "kan wel")? */
-    public static function isOutside(Collection $patterns, \DateTimeInterface $start, \DateTimeInterface $end): bool
+    public static function isOutside(AvailabilitySchedule|Employee|Collection $availability, \DateTimeInterface $start, \DateTimeInterface $end): bool
     {
-        return in_array(self::evaluate($patterns, $start, $end)[0], ['blocked', 'fail'], true);
+        return in_array(self::evaluate($availability, $start, $end)[0], ['blocked', 'fail'], true);
     }
 
-    private static function minutes(string $time): int
+    private static function schedule(AvailabilitySchedule|Employee|Collection $availability): AvailabilitySchedule
     {
-        [$h, $m] = array_map('intval', explode(':', $time));
+        return match (true) {
+            $availability instanceof AvailabilitySchedule => $availability,
+            $availability instanceof Employee => $availability->availabilitySchedule(),
+            default => new AvailabilitySchedule($availability, collect()),
+        };
+    }
 
-        return $h * 60 + $m;
+    /** Wordt [from, to) helemaal gedekt door de tijdvakken samen? @param list<array{0: int, 1: int}> $intervals */
+    private static function covered(array $intervals, int $from, int $to): bool
+    {
+        usort($intervals, fn ($a, $b) => $a[0] <=> $b[0]);
+        $reach = $from;
+        foreach ($intervals as [$s, $e]) {
+            if ($s > $reach) {
+                break;
+            }
+            $reach = max($reach, $e);
+            if ($reach >= $to) {
+                return true;
+            }
+        }
+
+        return $reach >= $to;
+    }
+
+    private static function time(int $minutes): string
+    {
+        $minutes %= 1440;
+
+        return sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
     }
 }
