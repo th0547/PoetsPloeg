@@ -53,11 +53,13 @@
                     :class="scope === 'p' ? 'border-teal-600 bg-teal-600 text-white' : 'border-gray-300 bg-white text-gray-700'" :aria-pressed="scope === 'p'">↻ Elke week</button>
             <button type="button" class="btn-sm rounded-md border px-2 py-1 font-medium" @click="scope = 'w'"
                     :class="scope === 'w' ? 'border-sky-600 bg-sky-600 text-white' : 'border-gray-300 bg-white text-gray-700'" :aria-pressed="scope === 'w'">📅 Alleen deze week</button>
-            <span class="inline-flex items-center gap-1" x-show="scope === 'w'">
-                <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(-1)" aria-label="Vorige week">‹</button>
-                <button type="button" class="btn-secondary btn-sm" @click="thisWeek()">Deze week</button>
-                <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(1)" aria-label="Volgende week">›</button>
-                <span class="ms-1 text-sm font-medium text-gray-700" x-text="weekLabel()"></span>
+            {{-- Bladeren kan altijd; vanuit "Elke week" ga je dan naar de gekozen week kijken. --}}
+            <span class="inline-flex items-center gap-1">
+                <button type="button" class="btn-secondary btn-sm" @click="browseWeek(-1)" aria-label="Vorige week">‹</button>
+                <button type="button" class="btn-secondary btn-sm" @click="browseWeek(0)">Deze week</button>
+                <button type="button" class="btn-secondary btn-sm" @click="browseWeek(1)" aria-label="Volgende week">›</button>
+                <span class="ms-1 text-sm font-medium text-gray-700" x-show="scope === 'w'" x-text="weekLabel()"></span>
+                <span class="ms-1 text-xs text-gray-500" x-show="scope === 'p'">blader om een week te bekijken</span>
             </span>
         </div>
 

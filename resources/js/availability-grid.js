@@ -288,6 +288,13 @@ export default function gridEditor({ occursOn, dayWindows, contract }) {
             else this.dayRules.push({ date, mode: 'unavailable_all', note: '', past: false, slots: [] });
         },
 
+        /** Bladeren door de weken. Vanuit "Elke week" spring je naar de stand "Alleen deze week" om die week te zien. */
+        browseWeek(step) {
+            if (step === 0) this.thisWeek();
+            else this.shiftWeek(step);
+            this.scope = 'w';
+        },
+
         goToDay(date) {
             this.weekStart = mondayOf(parseDate(date));
             this.scope = 'w';
