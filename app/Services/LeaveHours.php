@@ -35,6 +35,7 @@ class LeaveHours
             ->get(['id', 'starts_at', 'ends_at']);
         $templates = $employee->fixedTemplates()->where('task_templates.active', true)->with('patterns')->get();
         $workdays = $this->workdays($employee);
+        $schedule = $employee->availabilitySchedule();
         $perWorkday = $workdays ? ((float) ($employee->contract_hours_min ?? $employee->contract_hours_max ?? 0)) / count($workdays) : 0.0;
 
         $perDay = [];
@@ -53,7 +54,8 @@ class LeaveHours
                 $source = 'dienst';
             } elseif (($fixed = $this->fixedHours($templates, $day, $from, $to)) !== null) {
                 [$hours, $source] = [$fixed, 'vaste bezetting'];
-            } elseif (in_array($day->dayOfWeekIso, $workdays, true) && $perWorkday > 0) {
+            } elseif ($perWorkday > 0 && ($schedule->hasDateRules($day) ? $schedule->isWorkday($day) : in_array($day->dayOfWeekIso, $workdays, true))) {
+                // Losse datum (bijv. "hele dag niet") gaat vóór het weekpatroon.
                 $hours = min($perWorkday, $windowStart->diffInMinutes($windowEnd) / 60);
                 $source = 'contract';
             }

@@ -114,7 +114,7 @@ class ConflictChecker
         $windowEnd = CarbonImmutable::instance($to)->endOfWeek()->addDay();
 
         $this->employees = Employee::query()
-            ->with(['skills:id', 'buildings:id', 'availabilityPatterns'])
+            ->with(['skills:id', 'buildings:id', 'availabilityPatterns', 'availabilityDays'])
             ->whereIn('id', $employeeIds)
             ->get()
             ->keyBy('id');
@@ -196,7 +196,7 @@ class ConflictChecker
             ));
         }
 
-        [$availability, $availabilityReason] = AvailabilityCheck::evaluate($employee->availabilityPatterns, $start, $end);
+        [$availability, $availabilityReason] = AvailabilityCheck::evaluate($employee, $start, $end);
         if ($availability === 'blocked') {
             $warnings[] = $this->warning('availability', self::WARNING, 'Kan niet: '.$availabilityReason);
         } elseif ($availability === 'fail') {

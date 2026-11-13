@@ -26,7 +26,7 @@ class AvailabilityPattern extends Model
     ];
 
     protected $fillable = [
-        'employee_id', 'weekday', 'type', 'repeat_unit', 'repeat_every', 'starts_on', 'start_time', 'end_time', 'note',
+        'employee_id', 'weekday', 'type', 'repeat_unit', 'repeat_every', 'starts_on', 'valid_from', 'valid_until', 'start_time', 'end_time', 'note',
     ];
 
     protected $attributes = ['type' => 'available', 'repeat_unit' => 'week', 'repeat_every' => 1];
@@ -37,6 +37,8 @@ class AvailabilityPattern extends Model
             'weekday' => 'integer',
             'repeat_every' => 'integer',
             'starts_on' => 'date',
+            'valid_from' => 'date',
+            'valid_until' => 'date',
         ];
     }
 
@@ -49,6 +51,13 @@ class AvailabilityPattern extends Model
             'patterns.*.type' => ['required', Rule::in(array_keys(self::TYPES))],
             'patterns.*.repeat' => ['nullable', Rule::in(array_keys(self::REPEATS))],
             'patterns.*.starts_on' => ['nullable', 'date'],
+            'patterns.*.valid_from' => ['nullable', 'date'],
+            'patterns.*.valid_until' => ['nullable', 'date', function (string $attribute, mixed $value, \Closure $fail) {
+                $from = request()->input(str_replace('valid_until', 'valid_from', $attribute));
+                if (filled($from) && strtotime((string) $value) < strtotime((string) $from)) {
+                    $fail('"Tot en met" ligt vóór "geldig van".');
+                }
+            }],
             'patterns.*.note' => ['nullable', 'string', 'max:100'],
             'patterns.*.start_time' => ['required', 'date_format:H:i'],
             'patterns.*.end_time' => ['required', 'date_format:H:i'],
@@ -73,10 +82,22 @@ class AvailabilityPattern extends Model
         return isset(self::REPEATS[$key]) ? $key : 'w1';
     }
 
+    /** Valt deze datum binnen de periode (geldig van / t/m) van dit tijdvak? */
+    public function coversDate(\DateTimeInterface $date): bool
+    {
+        $day = CarbonImmutable::instance($date)->toDateString();
+
+        return ($this->valid_from === null || $this->valid_from->toDateString() <= $day)
+            && ($this->valid_until === null || $this->valid_until->toDateString() >= $day);
+    }
+
     /** Geldt dit tijdvak op deze datum? */
     public function occursOn(\DateTimeInterface $date): bool
     {
         $date = CarbonImmutable::instance($date)->startOfDay();
+        if (! $this->coversDate($date)) {
+            return false;
+        }
         $every = max(1, (int) $this->repeat_every);
         $anchor = $this->starts_on ? CarbonImmutable::instance($this->starts_on)->startOfDay() : null;
 

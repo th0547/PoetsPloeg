@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\AvailabilitySchedule;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -55,12 +56,28 @@ class Employee extends Model
         return $this->hasMany(AvailabilityPattern::class)->orderBy('weekday')->orderBy('start_time');
     }
 
+    /** Beschikbaarheid op losse datums (vervangt die dag het weekpatroon). */
+    public function availabilityDays(): HasMany
+    {
+        return $this->hasMany(AvailabilityDay::class)->orderBy('date')->orderBy('start_time');
+    }
+
+    /** Weekpatroon + losse datums samen: wat geldt er op een dag? */
+    public function availabilitySchedule(): AvailabilitySchedule
+    {
+        return AvailabilitySchedule::forEmployee($this);
+    }
+
     /**
      * Vervang het vaste weekpatroon door de (gevalideerde) tijdvakken uit het formulier.
      *
+     * Losse datums ($days, zie AvailabilityDay::rules()) worden vanaf vandaag vervangen; het verleden blijft.
+     * Zonder $days blijven de losse datums zoals ze zijn.
+     *
      * @param  array<int, array<string, mixed>>  $patterns  zie AvailabilityPattern::rules()
+     * @param  array<int, array<string, mixed>>|null  $days
      */
-    public function replaceAvailability(array $patterns): void
+    public function replaceAvailability(array $patterns, ?array $days = null): void
     {
         $this->availabilityPatterns()->delete();
         foreach ($patterns as $pattern) {
@@ -71,6 +88,8 @@ class Employee extends Model
                 'repeat_unit' => $unit,
                 'repeat_every' => $every,
                 'starts_on' => $startsOn,
+                'valid_from' => $pattern['valid_from'] ?? null,
+                'valid_until' => $pattern['valid_until'] ?? null,
                 // Bij herhaling per dag telt de weekdag niet; we bewaren die van de startdatum (handig voor sorteren).
                 'weekday' => $unit === 'day' ? CarbonImmutable::parse($startsOn)->dayOfWeekIso : $pattern['weekday'],
                 'start_time' => $pattern['start_time'],
@@ -79,6 +98,32 @@ class Employee extends Model
             ]);
         }
         $this->unsetRelation('availabilityPatterns');
+
+        if ($days !== null) {
+            $this->availabilityDays()->whereDate('date', '>=', today())->delete();
+            foreach (AvailabilityDay::rowsFromForm($days) as $row) {
+                $this->availabilityDays()->create($row);
+            }
+            $this->unsetRelation('availabilityDays');
+        }
+    }
+
+    /** Losse datums zoals het formulier ze verwacht: per datum een keuze en tijdvakken (vanaf 8 weken terug). */
+    public function availabilityDayRows(): array
+    {
+        return AvailabilityDay::formRows($this->availabilityDays->filter(fn (AvailabilityDay $d) => $d->date->gte(today()->subWeeks(8))));
+    }
+
+    /** Idem, na een mislukte validatie met wat de gebruiker had ingevuld (het verleden blijft zichtbaar). */
+    public function availabilityDayRowsWithOld(): array
+    {
+        $rows = $this->availabilityDayRows();
+        $old = old('days');
+        if (! is_array($old) || ! old('days_form')) {
+            return $rows;
+        }
+
+        return array_merge(array_values(array_filter($rows, fn ($r) => $r['past'])), array_values($old));
     }
 
     /** Het weekpatroon zoals het formulier (availabilityEditor) het verwacht. */
@@ -89,6 +134,8 @@ class Employee extends Model
             'type' => $p->type,
             'repeat' => $p->repeatKey(),
             'starts_on' => $p->starts_on?->toDateString(),
+            'valid_from' => $p->valid_from?->toDateString(),
+            'valid_until' => $p->valid_until?->toDateString(),
             'start_time' => substr($p->start_time, 0, 5),
             'end_time' => substr($p->end_time, 0, 5),
             'note' => $p->note,

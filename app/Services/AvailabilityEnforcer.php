@@ -18,8 +18,8 @@ class AvailabilityEnforcer
      */
     public function release(Employee $employee): Collection
     {
-        $employee->loadMissing('availabilityPatterns');
-        if ($employee->availabilityPatterns->isEmpty()) {
+        $schedule = $employee->availabilitySchedule();
+        if ($schedule->isEmpty()) {
             return collect();
         }
 
@@ -29,7 +29,7 @@ class AvailabilityEnforcer
             ->with('building')
             ->orderBy('starts_at')
             ->get()
-            ->filter(fn (Shift $s) => AvailabilityCheck::isOutside($employee->availabilityPatterns, $s->starts_at, $s->ends_at))
+            ->filter(fn (Shift $s) => AvailabilityCheck::isOutside($schedule, $s->starts_at, $s->ends_at))
             ->values();
 
         DB::transaction(function () use ($shifts, $employee) {

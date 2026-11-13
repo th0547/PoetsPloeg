@@ -15,7 +15,7 @@ class BackfillLeaveHours extends Command
     public function handle(LeaveHours $leaveHours): int
     {
         $count = 0;
-        Absence::withTrashed()->with('employee.availabilityPatterns')
+        Absence::withTrashed()->with(['employee.availabilityPatterns', 'employee.availabilityDays'])
             ->when(! $this->option('all'), fn ($q) => $q->whereNull('hours'))
             ->where(fn ($q) => $q->whereNull('hours_source')->orWhere('hours_source', '!=', 'handmatig'))
             ->chunkById(200, function ($absences) use ($leaveHours, &$count) {
