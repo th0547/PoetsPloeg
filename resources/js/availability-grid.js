@@ -6,7 +6,7 @@
  * terugschakelen werkt zonder omzetten. Tijdvakken met een herhaling of periode blijven regels.
  */
 
-import { isoDate, minutes, mondayOf, pad, parseDate } from './dates';
+import { addDays, isoDate, minutes, mondayOf, pad, parseDate } from './dates';
 
 const SLOT = 30; // minuten per vakje
 const ROWS = 1440 / SLOT;
@@ -115,8 +115,24 @@ export default function gridEditor({ occursOn, dayWindows, contract }) {
         /** Het rooster: per rij (half uur) zeven vakjes. */
         grid() {
             const days = this.days();
-            const cols = days.map((day, d) => (this.scope === 'p' ? this.patternCells(d + 1) : this.dateCells(day)));
+            const cols = days.map((day, d) => (this.scope === 'p' ? this.patternCells(d + 1) : this.withAbsence(day, this.dateCells(day))));
             return Array.from({ length: ROWS }, (_, r) => cols.map((c) => c[r]));
+        },
+
+        /** Goedgekeurde afwezigheid gaat vóór: die vakjes tonen we als afwezig (alleen in de stand "deze week"). */
+        withAbsence(day, cells) {
+            const dayStart = day.getTime();
+            const dayEnd = addDays(day, 1).getTime();
+            this.absences.forEach((a) => {
+                const s = new Date(a.start).getTime();
+                const e = new Date(a.end).getTime();
+                if (s >= dayEnd || e <= dayStart) return;
+                const from = Math.max(0, Math.floor((s - dayStart) / 60000 / SLOT));
+                // 23:59 telt als einde van de dag.
+                const to = Math.min(ROWS, Math.ceil(Math.ceil((e - dayStart) / 60000 / 5) * 5 / SLOT));
+                for (let r = from; r < to; r++) cells[r] = { t: 'absent', n: `Afwezig: ${a.label}` };
+            });
+            return cells;
         },
 
         /** Wat geldt er in deze kolom buiten de gekleurde vakjes? */
@@ -131,6 +147,7 @@ export default function gridEditor({ occursOn, dayWindows, contract }) {
             const past = this.scope === 'w' && this.isPast(this.days()[d]) ? ' opacity-50' : '';
             if (c?.t === 'available') return 'bg-teal-400' + past;
             if (c?.t === 'unavailable') return 'avail-blocked' + past;
+            if (c?.t === 'absent') return 'avail-absent' + past;
             const rest = this.restCol(d);
             return (rest === 'unavailable' ? 'bg-gray-200' : rest === 'available' ? 'bg-teal-50' : 'bg-gray-100') + past;
         },

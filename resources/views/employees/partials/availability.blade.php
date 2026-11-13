@@ -99,7 +99,7 @@
         </div>
         <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
             <span x-show="scope === 'p'">Wat je hier sleept geldt elke week. De regels hieronder volgen mee.</span>
-            <span x-show="scope === 'w'">Wat je hier sleept geldt alleen op die datum. Tik op een dag voor “hele dag niet”; nog een tik zet de dag terug naar het patroon. Gestippeld = wijkt af.</span>
+            <span x-show="scope === 'w'">Wat je hier sleept geldt alleen op die datum. Tik op een dag voor “hele dag niet”; nog een tik zet de dag terug naar het patroon. Gestippeld = wijkt af.<span x-show="weekHasAbsence()"> Grijs gearceerd = afwezig; dat gaat vóór en telt niet mee in het totaal.</span></span>
             <button type="button" class="underline hover:text-teal-700" x-show="firstRow() > 0 || showNight" @click="showNight = !showNight" x-text="showNight ? 'Nacht verbergen' : 'Toon 00:00–06:00'"></button>
         </div>
 
