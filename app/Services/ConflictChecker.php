@@ -271,21 +271,7 @@ class ConflictChecker
         }
 
         $others = $mine->filter(fn ($a) => $a->shift_id !== $shift->id);
-        $previous = $others->filter(fn ($a) => $a->ends_at->lte($start))->sortByDesc(fn ($a) => $a->ends_at->getTimestamp())->first();
-        $next = $others->filter(fn ($a) => $a->starts_at->gte($end))->sortBy(fn ($a) => $a->starts_at->getTimestamp())->first();
-        $required = fn (CarbonImmutable $endsAt) => $this->isNightEnd($endsAt)
-            ? $policy->get('roster.rest_after_night_hours')
-            : $policy->get('roster.rest_daily_hours');
-        if ($previous && ($gap = $previous->ends_at->diffInMinutes($start) / 60) < $required($previous->ends_at)) {
-            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
-                'Rusttijd %s u na %s (%s); minimaal %s u', $this->num($gap), $previous->title, $previous->ends_at->format('d-m H:i'), $this->num($required($previous->ends_at)),
-            ));
-        }
-        if ($next && ($gap = $end->diffInMinutes($next->starts_at) / 60) < $required($end)) {
-            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
-                'Rusttijd %s u tot %s (%s); minimaal %s u', $this->num($gap), $next->title, $next->starts_at->format('d-m H:i'), $this->num($required($end)),
-            ));
-        }
+        array_push($warnings, ...$this->restWarnings($shift, $others, $start, $end, $policy));
 
         $weekMax = $policy->get('roster.max_week_hours_law');
         if ($weekHours > $weekMax) {
@@ -295,12 +281,89 @@ class ConflictChecker
         return $warnings;
     }
 
-    /** Nachtdienst die na 02:00 eindigt (Arbeidstijdenwet art. 5:8): eindtijd tussen 02:00 en 08:00. */
-    private function isNightEnd(CarbonImmutable $endsAt): bool
+    /**
+     * Rusttijd rond een dienst.
+     *
+     * - Na een nachtdienst die na 02:00 eindigt minimaal rest_after_night_hours rust (ATW art. 5:8).
+     * - Verder minimaal rest_daily_hours aaneengesloten rust binnen elke periode van 24 uur die
+     *   begint bij de start van een dienst (ATW art. 5:3). Een gebroken dienst (ochtend en
+     *   middag op dezelfde dag) mag dus, zolang er binnen die 24 uur genoeg rust aan één stuk zit.
+     *
+     * @return list<array>
+     */
+    private function restWarnings(Shift $shift, Collection $others, CarbonImmutable $start, CarbonImmutable $end, Policy $policy): array
     {
-        $minutes = $endsAt->hour * 60 + $endsAt->minute;
+        $nightRest = $policy->get('roster.rest_after_night_hours');
+        $previous = $others->filter(fn ($a) => $a->ends_at->lte($start))->sortByDesc(fn ($a) => $a->ends_at->getTimestamp())->first();
+        $next = $others->filter(fn ($a) => $a->starts_at->gte($end))->sortBy(fn ($a) => $a->starts_at->getTimestamp())->first();
 
-        return $minutes > 120 && $minutes <= 480;
+        $warnings = [];
+        if ($previous && $this->isNightShift($previous->starts_at, $previous->ends_at)
+            && ($gap = $previous->ends_at->diffInMinutes($start) / 60) < $nightRest) {
+            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
+                'Rusttijd %s u na nachtdienst %s (%s); minimaal %s u', $this->num($gap), $previous->title, $previous->ends_at->format('d-m H:i'), $this->num($nightRest),
+            ));
+        }
+        if ($next && $this->isNightShift($start, $end)
+            && ($gap = $end->diffInMinutes($next->starts_at) / 60) < $nightRest) {
+            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
+                'Rusttijd %s u na deze nachtdienst tot %s (%s); minimaal %s u', $this->num($gap), $next->title, $next->starts_at->format('d-m H:i'), $this->num($nightRest),
+            ));
+        }
+        if ($warnings !== []) {
+            return $warnings;
+        }
+
+        $dailyRest = $policy->get('roster.rest_daily_hours');
+        $periods = $others->map(fn ($a) => ['start' => $a->starts_at, 'end' => $a->ends_at, 'title' => $a->title])
+            ->push(['start' => $start, 'end' => $end, 'title' => $shift->title])
+            ->sortBy(fn ($p) => $p['start']->getTimestamp())
+            ->values();
+
+        // Elke 24-uursperiode waarin deze dienst valt, begint bij de start van deze of een eerdere dienst.
+        $worst = null;
+        foreach ($periods->filter(fn ($p) => $p['start']->lte($start) && $p['start']->gt($start->subDay())) as $window) {
+            $windowEnd = $window['start']->addDay();
+            $cursor = $window['start'];
+            $longest = 0;
+            foreach ($periods as $p) {
+                if ($p['start']->gte($windowEnd) || $p['end']->lte($window['start'])) {
+                    continue;
+                }
+                $longest = max($longest, $cursor->diffInMinutes(max($p['start'], $cursor)));
+                $cursor = max($cursor, min($p['end'], $windowEnd));
+            }
+            $longest = max($longest, $cursor->diffInMinutes($windowEnd));
+            if ($longest / 60 < $dailyRest && ($worst === null || $longest < $worst['minutes'])) {
+                $worst = ['minutes' => $longest, 'window' => $window];
+            }
+        }
+
+        if ($worst) {
+            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
+                'Rusttijd %s u binnen 24 u vanaf %s (%s); minimaal %s u aaneengesloten',
+                $this->num($worst['minutes'] / 60), $worst['window']['title'], $worst['window']['start']->format('d-m H:i'), $this->num($dailyRest),
+            ));
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * Nachtdienst die na 02:00 eindigt (ATW art. 1:7 en 5:8): meer dan een uur werk tussen 00:00
+     * en 06:00, en de dienst loopt in die nacht door tot na 02:00.
+     */
+    private function isNightShift(CarbonImmutable $start, CarbonImmutable $end): bool
+    {
+        for ($day = $start->startOfDay(); $day->lt($end); $day = $day->addDay()) {
+            $from = max($start, $day);
+            $to = min($end, $day->setTime(6, 0));
+            if ($from->lt($to) && $from->diffInMinutes($to) > 60 && $end->gt($day->setTime(2, 0))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function hoursInWeek(int $employeeId, CarbonImmutable $weekStart, ?int $excludeShiftId = null): float

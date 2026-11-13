@@ -197,4 +197,47 @@ class PolicyTest extends TestCase
         Policy::forget();
         $this->assertNotContains('rest', array_column(app(ConflictChecker::class)->forCandidate($morning, $employee->id)['warnings'], 'type'));
     }
+
+    public function test_split_shift_on_one_day_is_no_rest_time_violation(): void
+    {
+        $employee = Employee::factory()->create();
+        Shift::factory()->at('2026-11-18', '07:30', '08:00')->create()->assignments()->create(['employee_id' => $employee->id]);
+        Shift::factory()->at('2026-11-19', '07:30', '08:00')->create()->assignments()->create(['employee_id' => $employee->id]);
+        $afternoon = Shift::factory()->at('2026-11-18', '13:00', '15:00')->create();
+
+        // 07:30–08:00 is geen nachtdienst en tussen 15:00 en 07:30 zit 16,5 u rust aan één stuk.
+        $this->assertNotContains('rest', array_column(app(ConflictChecker::class)->forCandidate($afternoon, $employee->id)['warnings'], 'type'));
+    }
+
+    public function test_daily_rest_is_measured_within_24_hours_from_a_shift_start(): void
+    {
+        $employee = Employee::factory()->create();
+        Shift::factory()->at('2026-11-18', '08:00', '12:00')->create()->assignments()->create(['employee_id' => $employee->id]);
+        Shift::factory()->at('2026-11-19', '06:00', '10:00')->create()->assignments()->create(['employee_id' => $employee->id]);
+        $evening = Shift::factory()->at('2026-11-18', '20:00', '22:00')->create();
+
+        // Binnen 24 u vanaf 18-11 08:00 is de langste rust 8 u (12–20 en 22–06).
+        $rest = collect(app(ConflictChecker::class)->forCandidate($evening, $employee->id)['warnings'])->firstWhere('type', 'rest');
+        $this->assertNotNull($rest);
+        $this->assertStringContainsString('Rusttijd 8 u binnen 24 u', $rest['message']);
+        $this->assertStringContainsString('18-11 08:00', $rest['message']);
+    }
+
+    public function test_night_rest_only_applies_after_a_real_night_shift(): void
+    {
+        $employee = Employee::factory()->create();
+        Shift::factory()->at('2026-11-18', '22:00', '23:59')->create(['ends_at' => '2026-11-19 06:00:00'])->assignments()->create(['employee_id' => $employee->id]);
+        $early = Shift::factory()->at('2026-11-18', '05:00', '08:00')->create();
+        $afterNight = Shift::factory()->at('2026-11-19', '18:00', '20:00')->create();
+        $checker = app(ConflictChecker::class);
+
+        // 22:00–06:00 is een nachtdienst: 12 u rust is te weinig, minimaal 14 u.
+        $rest = collect($checker->forCandidate($afterNight, $employee->id)['warnings'])->firstWhere('type', 'rest');
+        $this->assertStringContainsString('na nachtdienst', $rest['message']);
+        $this->assertStringContainsString('minimaal 14 u', $rest['message']);
+
+        // 05:00–08:00 heeft maar een uur tussen 00:00 en 06:00: geen nachtdienst, dus de 14 u geldt niet.
+        $messages = array_column($checker->forCandidate($early, $employee->id)['warnings'], 'message');
+        $this->assertEmpty(array_filter($messages, fn ($m) => str_contains($m, 'minimaal 14 u')));
+    }
 }
