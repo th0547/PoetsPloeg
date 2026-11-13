@@ -145,7 +145,7 @@ class AvailabilityDaysTest extends TestCase
         $this->assertSame('slots', $rows['2026-11-24']['mode']);
         $this->assertSame('unavailable_all', $rows['2026-11-25']['mode']);
         $this->assertTrue($rows['2026-11-10']['past']);
-        $this->get(route('my.availability'))->assertOk()->assertSee('Afwijkende dagen');
+        $this->get(route('my.availability'))->assertOk()->assertSee('Afwijkende dagen')->assertSee('Test nieuwe invoer');
     }
 
     public function test_without_days_form_dates_are_kept(): void

@@ -1,9 +1,12 @@
 {{-- Beschikbaarheid: weekpatroon en afwijkende dagen. Gebruikt op de medewerkerpagina én door de medewerker zelf. --}}
 @php($days = config('poetsploeg.weekdays'))
-<div class="card card-body space-y-4" x-data="availabilityEditor(@js($patterns), @js($absenceBlocks), @js($availabilityDays ?? []))">
+<div class="card card-body space-y-4" x-data="availabilityEditor(@js($patterns), @js($absenceBlocks), @js($availabilityDays ?? []), @js(isset($employee) ? $employee->contract_hours_min : null))">
     <input type="hidden" name="days_form" value="1">
     <div>
-        <h2 class="font-semibold text-gray-800">Beschikbaarheid</h2>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 class="font-semibold text-gray-800">Beschikbaarheid <span x-show="newMode" x-cloak class="chip ms-1 align-middle bg-sky-100 text-sky-800">proefversie</span></h2>
+            <button type="button" class="btn-secondary btn-sm" @click="toggleNew()" x-text="newMode ? '← Terug naar gewone invoer' : '✨ Test nieuwe invoer'">✨ Test nieuwe invoer</button>
+        </div>
         <p class="text-xs text-gray-500">
             @if ($self)
             Je vaste weekpatroon: wanneer <strong class="text-teal-700">kun</strong> je normaal gesproken wel, en wanneer <strong class="text-red-700">niet</strong> (bijv. school 08:00–15:00)?
@@ -14,7 +17,7 @@
     </div>
 
     {{-- Weekpatroon, afwijkende dagen en afwezigheid --}}
-    <div class="grid gap-3 sm:grid-cols-3">
+    <div class="grid gap-3 sm:grid-cols-3" x-show="!newMode">
         <div class="rounded-md border border-teal-200 bg-teal-50/60 px-3 py-2 text-sm text-teal-900">
             <p class="font-semibold">↻ Weekpatroon</p>
             <p class="mt-0.5 text-xs">Wat steeds terugkomt, bijv. “elke maandag vanaf 17:00”. Geef een tijdvak een <strong>periode</strong> als het maar een tijd geldt, zoals het rooster van een schoolblok.</p>
@@ -34,8 +37,125 @@
         </div>
     </div>
 
+    {{-- Proef "nieuwe invoer": één rooster met twee standen. Werkt op dezelfde gegevens als de gewone invoer. --}}
+    <div class="space-y-3" x-show="newMode" x-cloak>
+        <p class="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+            <strong>Nieuwe invoer (proef).</strong> Sleep in het rooster om aan te geven wanneer {{ $self ? 'je' : 'de medewerker' }} wel of niet kan. Op een telefoon: tik op een vakje, of houd even vast en sleep.
+            Opslaan werkt hetzelfde als altijd, en terugschakelen kan op elk moment zonder iets kwijt te raken.
+            @if ($absenceUrl)
+                Vakantie, ziekte of een afspraak leg je vast als afwezigheid: <a href="{{ $absenceUrl }}" class="font-medium underline">{{ $self ? 'verlof aanvragen ›' : 'afwezigheid registreren ›' }}</a>
+            @endif
+        </p>
+
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-gray-600">Ik pas aan:</span>
+            <button type="button" class="btn-sm rounded-md border px-2 py-1 font-medium" @click="scope = 'p'"
+                    :class="scope === 'p' ? 'border-teal-600 bg-teal-600 text-white' : 'border-gray-300 bg-white text-gray-700'" :aria-pressed="scope === 'p'">↻ Elke week</button>
+            <button type="button" class="btn-sm rounded-md border px-2 py-1 font-medium" @click="scope = 'w'"
+                    :class="scope === 'w' ? 'border-sky-600 bg-sky-600 text-white' : 'border-gray-300 bg-white text-gray-700'" :aria-pressed="scope === 'w'">📅 Alleen deze week</button>
+            <span class="inline-flex items-center gap-1" x-show="scope === 'w'">
+                <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(-1)" aria-label="Vorige week">‹</button>
+                <button type="button" class="btn-secondary btn-sm" @click="thisWeek()">Deze week</button>
+                <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(1)" aria-label="Volgende week">›</button>
+                <span class="ms-1 text-sm font-medium text-gray-700" x-text="weekLabel()"></span>
+            </span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-gray-600">Kwast:</span>
+            <button type="button" class="btn-sm rounded-md border px-2 py-1 font-medium" @click="brush = 'available'"
+                    :class="brush === 'available' ? 'border-teal-600 bg-teal-400 text-teal-950' : 'border-gray-300 bg-white text-gray-700'" :aria-pressed="brush === 'available'">Kan wel</button>
+            <button type="button" class="btn-sm rounded-md border px-2 py-1 font-medium" @click="brush = 'unavailable'"
+                    :class="brush === 'unavailable' ? 'avail-blocked border-red-500 text-red-900' : 'border-gray-300 bg-white text-gray-700'" :aria-pressed="brush === 'unavailable'">Kan niet</button>
+            <button type="button" class="btn-sm rounded-md border px-2 py-1 font-medium" @click="brush = 'erase'"
+                    :class="brush === 'erase' ? 'border-gray-600 bg-gray-200 text-gray-900' : 'border-gray-300 bg-white text-gray-700'" :aria-pressed="brush === 'erase'">Wissen</button>
+            <span class="rounded px-2 py-0.5 text-sm font-semibold" :class="belowContract() ? 'bg-amber-100 text-amber-900' : 'text-gray-800'">
+                <span x-text="gridTotalText()"></span><span x-show="belowContract()"> · onder contract</span>
+            </span>
+        </div>
+
+        <div class="select-none text-xs" data-avgrid style="-webkit-touch-callout: none"
+             @pointerdown="gridDown($event)" @pointermove.window="gridMove($event)" @pointerup.window="endPaint()" @pointercancel.window="endPaint()"
+             @touchstart="touchStart($event)" @touchmove="touchMove($event)" @touchend="touchEnd()" @touchcancel="touchEnd(true)">
+            <div class="flex">
+                <div class="w-10 shrink-0"></div>
+                <template x-for="(d, di) in days()" :key="di">
+                    <button type="button" class="mx-px mb-0.5 min-w-0 flex-1 truncate rounded py-0.5 text-center font-semibold"
+                            :disabled="scope === 'p' || isPast(d)" @click="toggleDayOff(d)"
+                            :title="scope === 'w' && !isPast(d) ? (dayRule(d) ? 'Tik: weer volgens het patroon' : 'Tik: hele dag niet') : null"
+                            :class="scope === 'w' && dayRule(d) ? 'bg-sky-100 text-sky-900 outline-dashed outline-1 outline-sky-500' : (scope === 'w' && !isPast(d) ? 'text-gray-700 hover:bg-gray-100' : 'text-gray-500')"
+                            x-text="gridDayLabel(d, di)"></button>
+                </template>
+            </div>
+            <template x-for="(row, r) in grid()" :key="r">
+                <div class="flex" x-show="r >= firstRow()">
+                    <div class="w-10 shrink-0 pe-1 text-right text-[10px] leading-none text-gray-400" x-text="rowLabel(r)"></div>
+                    <template x-for="(c, d) in row" :key="d">
+                        <div class="mx-px h-3.5 flex-1 cursor-crosshair" :data-r="r" :data-d="d"
+                             :class="[cellClass(c, d), r % 2 === 0 ? 'mt-px rounded-t-sm' : 'rounded-b-sm']" :title="c && c.n ? c.n : null"></div>
+                    </template>
+                </div>
+            </template>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+            <span x-show="scope === 'p'">Wat je hier sleept geldt elke week. De regels hieronder volgen mee.</span>
+            <span x-show="scope === 'w'">Wat je hier sleept geldt alleen op die datum. Tik op een dag voor “hele dag niet”; nog een tik zet de dag terug naar het patroon. Gestippeld = wijkt af.</span>
+            <button type="button" class="underline hover:text-teal-700" x-show="firstRow() > 0 || showNight" @click="showNight = !showNight" x-text="showNight ? 'Nacht verbergen' : 'Toon 00:00–06:00'"></button>
+        </div>
+
+        {{-- Het weekpatroon als regels: hetzelfde patroon als het rooster in de stand "Elke week". --}}
+        <div class="space-y-2">
+            <h3 class="text-sm font-semibold text-gray-800">↻ Weekpatroon als regels</h3>
+            <p x-show="!patternRules().length" class="text-sm text-gray-500">Nog geen weekpatroon. Sleep in het rooster in de stand “Elke week”, of voeg een regel toe.</p>
+            <template x-for="rule in patternRules()" :key="rule.key">
+                <div class="flex flex-wrap items-center gap-2 rounded-md border-l-4 px-2 py-1.5"
+                     :class="rule.type === 'unavailable' ? 'border-red-400 bg-red-50/60' : 'border-teal-400 bg-teal-50/40'">
+                    <span class="w-16 text-sm font-semibold" :class="rule.type === 'unavailable' ? 'text-red-700' : 'text-teal-700'" x-text="rule.type === 'unavailable' ? 'Kan niet' : 'Kan wel'"></span>
+                    <span class="inline-flex gap-0.5">
+                        @foreach ($days as $num => $day)
+                            <button type="button" class="w-8 rounded border py-0.5 text-xs font-semibold" @click="toggleRuleDay(rule, {{ $num }})"
+                                    :aria-pressed="rule.days.includes({{ $num }})" title="{{ ucfirst($day) }}"
+                                    :class="rule.days.includes({{ $num }}) ? (rule.type === 'unavailable' ? 'border-red-400 bg-red-100 text-red-900' : 'border-teal-500 bg-teal-100 text-teal-900') : 'border-gray-300 bg-white text-gray-400'">{{ mb_substr($day, 0, 2) }}</button>
+                        @endforeach
+                    </span>
+                    <span class="inline-flex items-center gap-1">
+                        <select aria-label="Van" class="rounded-md border-gray-300 py-1 text-sm shadow-sm" @change="setRuleTimes(rule, Number($event.target.value), rule.e)">
+                            <template x-for="o in timeOptions().slice(0, -1)" :key="o.value"><option :value="o.value" :selected="o.value === rule.s" x-text="o.label"></option></template>
+                        </select>
+                        <span class="text-sm text-gray-500">–</span>
+                        <select aria-label="Tot" class="rounded-md border-gray-300 py-1 text-sm shadow-sm" @change="setRuleTimes(rule, rule.s, Number($event.target.value))">
+                            <template x-for="o in timeOptions().slice(1)" :key="o.value"><option :value="o.value" :selected="o.value === rule.e" x-text="o.label"></option></template>
+                        </select>
+                    </span>
+                    <input type="text" :value="rule.note" @change="setRuleNote(rule, $event.target.value)" maxlength="100" aria-label="Omschrijving"
+                           :placeholder="rule.type === 'unavailable' ? 'Reden, bijv. school' : 'Opmerking'"
+                           class="min-w-0 flex-1 basis-32 rounded-md border-gray-300 py-1 text-sm shadow-sm">
+                    <button type="button" @click="removeRule(rule)" class="rounded p-1 text-gray-400 hover:bg-white hover:text-red-600" title="Verwijderen" aria-label="Verwijderen">&times;</button>
+                </div>
+            </template>
+            <div class="flex flex-wrap gap-2 pt-1">
+                <button type="button" class="btn-secondary btn-sm" @click="addRule('available')">+ Kan wel</button>
+                <button type="button" class="btn-secondary btn-sm text-red-700" @click="addRule('unavailable')">+ Kan niet</button>
+                <button type="button" class="btn-secondary btn-sm" @click="addComplex()">+ Regel met herhaling of periode</button>
+            </div>
+        </div>
+
+        {{-- Afwijkende dagen in het kort; aanpassen doe je in het rooster. --}}
+        <div class="space-y-1">
+            <h3 class="text-sm font-semibold text-gray-800">📅 Afwijkende dagen</h3>
+            <p x-show="!editableDays().length" class="text-sm text-gray-500">Geen afwijkende dagen. Kies “Alleen deze week” en sleep in een dag, of tik op de dag.</p>
+            <template x-for="r in editableDays()" :key="'n' + r.date">
+                <div class="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50/50 px-2 py-1 text-sm">
+                    <button type="button" class="font-medium text-sky-900 underline" @click="goToDay(r.date)" x-text="dayTitle(r)"></button>
+                    <span class="min-w-0 flex-1 text-gray-700" x-text="daySummary(r)"></span>
+                    <button type="button" class="text-xs text-gray-500 underline hover:text-red-600" @click="resetDay(r.date)">Terug naar weekpatroon</button>
+                </div>
+            </template>
+        </div>
+    </div>
+
     {{-- Weekoverzicht: per dag een tijdbalk --}}
-    <div class="space-y-2">
+    <div class="space-y-2" x-show="!newMode">
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="inline-flex items-center gap-1">
                 <button type="button" class="btn-secondary btn-sm" @click="shiftWeek(-1)" aria-label="Vorige week">‹</button>
@@ -115,10 +235,10 @@
 
     {{-- Tijdvakken: gesorteerd op dag en tijd bij openen en na opslaan; tijdens bewerken blijven regels op hun plek. --}}
     <div class="space-y-2">
-        <h3 class="text-sm font-semibold text-gray-800">↻ Weekpatroon</h3>
-        <p x-show="!patterns.length" class="text-sm text-gray-500">Nog geen tijdvakken. Voeg hieronder toe wat elke week terugkomt.</p>
+        <h3 class="text-sm font-semibold text-gray-800" x-show="!newMode || hasComplex()" x-text="newMode ? 'Regels met herhaling of periode' : '↻ Weekpatroon'">↻ Weekpatroon</h3>
+        <p x-show="!patterns.length && !newMode" class="text-sm text-gray-500">Nog geen tijdvakken. Voeg hieronder toe wat elke week terugkomt.</p>
         <template x-for="(p, i) in patterns" :key="i">
-            <div class="flex flex-wrap items-center gap-2 rounded-md border-l-4 px-2 py-1.5 transition-shadow" :data-pattern="i"
+            <div class="flex flex-wrap items-center gap-2 rounded-md border-l-4 px-2 py-1.5 transition-shadow" :data-pattern="i" x-show="!newMode || isComplex(p)"
                  :class="[p.type === 'unavailable' ? 'border-red-400 bg-red-50/60' : 'border-teal-400 bg-teal-50/40', highlight === i ? 'ring-2 ring-teal-500' : '']">
                 <select :name="`patterns[${i}][type]`" x-model="p.type" aria-label="Kan wel of kan niet"
                         class="rounded-md border-gray-300 py-1 text-sm font-medium shadow-sm" :class="p.type === 'unavailable' ? 'text-red-700' : 'text-teal-700'">
@@ -164,22 +284,22 @@
                 <button type="button" @click="remove(i)" class="rounded p-1 text-gray-400 hover:bg-white hover:text-red-600" title="Verwijderen" aria-label="Verwijderen">&times;</button>
             </div>
         </template>
-        <div class="flex flex-wrap gap-2 pt-1">
+        <div class="flex flex-wrap gap-2 pt-1" x-show="!newMode">
             <button type="button" class="btn-secondary btn-sm" @click="add('available')">+ Kan wel</button>
             <button type="button" class="btn-secondary btn-sm text-red-700" @click="add('unavailable')">+ Kan niet</button>
             <button type="button" class="btn-secondary btn-sm" x-show="patterns.length && !isDaily(patterns[patterns.length - 1])" @click="copyToWeekdays()">
                 Laatste regel kopiëren naar ma t/m vr
             </button>
         </div>
-        <p class="text-xs text-gray-500">Herhaling “om de week”, “om de 3 weken” of “om de dag” telt vanaf de gekozen startdatum; blader hierboven door de weken om te zien wanneer het geldt.</p>
+        <p class="text-xs text-gray-500" x-show="!newMode || hasComplex()">Herhaling “om de week”, “om de 3 weken” of “om de dag” telt vanaf de gekozen startdatum; blader hierboven door de weken om te zien wanneer het geldt.</p>
     </div>
 
     {{-- Afwijkende dagen: vervangen die dag het weekpatroon. --}}
     <div class="space-y-2">
-        <h3 class="text-sm font-semibold text-gray-800">📅 Afwijkende dagen</h3>
-        <p x-show="!editableDays().length" class="text-sm text-gray-500">Geen afwijkende dagen. Klik in het weekoverzicht op <strong>Anders</strong> bij een dag.</p>
+        <h3 class="text-sm font-semibold text-gray-800" x-show="!newMode">📅 Afwijkende dagen</h3>
+        <p x-show="!newMode && !editableDays().length" class="text-sm text-gray-500">Geen afwijkende dagen. Klik in het weekoverzicht op <strong>Anders</strong> bij een dag.</p>
         <template x-for="(r, j) in editableDays()" :key="r.date">
-            <div class="space-y-2 rounded-md border border-sky-200 bg-sky-50/50 px-2 py-2 transition-shadow" :data-day="r.date"
+            <div class="space-y-2 rounded-md border border-sky-200 bg-sky-50/50 px-2 py-2 transition-shadow" :data-day="r.date" x-show="!newMode"
                  :class="highlightDay === r.date ? 'ring-2 ring-sky-500' : ''">
                 <input type="hidden" :name="`days[${j}][date]`" :value="r.date">
                 <div class="flex flex-wrap items-center gap-2">
