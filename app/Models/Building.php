@@ -13,7 +13,7 @@ class Building extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'address', 'postal_code', 'city', 'contact_name', 'contact_phone', 'contact_email',
+        'name', 'short_name', 'address', 'postal_code', 'city', 'contact_name', 'contact_phone', 'contact_email',
         'access_instructions', 'notes', 'color', 'active',
     ];
 
@@ -47,6 +47,24 @@ class Building extends Model
     public function shifts(): HasMany
     {
         return $this->hasMany(Shift::class);
+    }
+
+    /**
+     * Korte naam voor compacte weergaven (maandrooster): de ingevulde korte naam, anders afgeleid van
+     * de naam ("Rotomoulding Nederland" → "Rotom", "JB Ventures" → "JB Ven").
+     */
+    public function shortLabel(): string
+    {
+        if (filled($this->short_name)) {
+            return $this->short_name;
+        }
+        $words = preg_split('/\s+/', trim((string) $this->name)) ?: [];
+        $first = $words[0] ?? '';
+        if (mb_strlen($first) <= 3 && isset($words[1])) {
+            $first .= ' '.$words[1];
+        }
+
+        return rtrim(mb_substr($first, 0, mb_strlen($words[0] ?? '') <= 3 ? 6 : 5));
     }
 
     public function fullAddress(): string

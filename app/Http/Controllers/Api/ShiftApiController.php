@@ -10,6 +10,7 @@ use App\Models\Skill;
 use App\Services\AbsenceService;
 use App\Services\Audit;
 use App\Services\ConflictChecker;
+use App\Services\FixedStaffCheck;
 use App\Services\ReplacementFinder;
 use App\Services\ShiftGenerator;
 use App\Support\Planning;
@@ -134,9 +135,10 @@ class ShiftApiController extends Controller
 
     private function present(Shift $shift): array
     {
-        $shift->load(['building', 'template', 'pattern', 'skills:id,name', 'assignments.employee:id,name,phone,color']);
+        $shift->load(['building', 'template.employees:id,name,color,active', 'pattern', 'skills:id,name', 'assignments.employee:id,name,phone,color']);
         $warnings = $this->checker->forShifts(collect([$shift]))[$shift->id] ?? [];
         $contact = Gate::allows('view-contact-details');
+        $now = now();
 
         return [
             'id' => $shift->id,
@@ -152,6 +154,8 @@ class ShiftApiController extends Controller
             'notes' => $shift->notes,
             'is_modified' => $shift->is_modified,
             'cancelled' => $shift->cancelled_at !== null,
+            'state' => $shift->ends_at->lte($now) ? 'done' : ($shift->starts_at->lte($now) ? 'now' : 'later'),
+            'fixed_missing' => app(FixedStaffCheck::class)->missingOn($shift),
             'template' => $shift->template ? [
                 'id' => $shift->template->id,
                 // Het patroon van deze dienst; bij oudere diensten (zonder patroon) alle patronen van de taak.
@@ -174,6 +178,8 @@ class ShiftApiController extends Controller
                 'name' => $a->employee->name,
                 'phone' => $contact ? $a->employee->phone : null,
                 'color' => $a->employee->color,
+                'ink' => Planning::contrast($a->employee->color),
+                'initials' => Planning::initials($a->employee->name),
                 'source' => ShiftAssignment::SOURCES[$a->source] ?? $a->source,
                 'warnings' => $warnings[$a->employee_id] ?? [],
             ])->values(),

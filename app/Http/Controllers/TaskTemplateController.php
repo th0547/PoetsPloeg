@@ -8,6 +8,7 @@ use App\Models\Skill;
 use App\Models\TaskTemplate;
 use App\Models\TaskTemplatePattern;
 use App\Services\DutchHolidays;
+use App\Services\FixedStaffCheck;
 use App\Services\RecurrenceRule;
 use App\Services\ShiftGenerator;
 use Carbon\CarbonImmutable;
@@ -15,11 +16,15 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class TaskTemplateController extends Controller
 {
-    public function __construct(private ShiftGenerator $generator, private DutchHolidays $holidays) {}
+    /** Uitkomst van de controle op de vaste bezetting bij de laatste save(), voor de melding. */
+    private array $staffing = [];
+
+    public function __construct(private ShiftGenerator $generator, private DutchHolidays $holidays, private FixedStaffCheck $staffCheck) {}
 
     public function create(Building $building): View
     {
@@ -41,7 +46,7 @@ class TaskTemplateController extends Controller
         $template = DB::transaction(fn () => $this->save($building, new TaskTemplate, $request));
         $this->generator->generateAhead(collect([$template]));
 
-        return redirect()->route('buildings.show', $building)->with('status', 'Taak toegevoegd en ingepland.');
+        return redirect()->route('buildings.show', $building)->with('status', 'Taak toegevoegd en ingepland.'.$this->staffingNote());
     }
 
     public function edit(Building $building, TaskTemplate $template): View
@@ -55,7 +60,7 @@ class TaskTemplateController extends Controller
         $this->generator->regenerateTemplate($template);
 
         return redirect()->route('buildings.show', $building)
-            ->with('status', 'Taak opgeslagen. Toekomstige diensten zijn bijgewerkt (handmatig aangepaste diensten blijven staan).');
+            ->with('status', 'Taak opgeslagen. Toekomstige diensten zijn bijgewerkt (handmatig aangepaste diensten blijven staan).'.$this->staffingNote());
     }
 
     public function destroy(Building $building, TaskTemplate $template): RedirectResponse
@@ -133,6 +138,18 @@ class TaskTemplateController extends Controller
         ]);
     }
 
+    /** Aanvulling op de melding na opslaan: wat betekent de vaste bezetting voor de diensten? */
+    private function staffingNote(): string
+    {
+        $problems = collect($this->staffing)->filter(fn ($r) => $r['status'] !== FixedStaffCheck::OK && $r['possible'] < $r['total']);
+        if ($problems->isEmpty()) {
+            return '';
+        }
+
+        return ' Let op: '.$problems->map(fn ($r) => sprintf('%s staat op %d van de %d diensten', $r['name'], $r['possible'], $r['total']))->join(', ', ' en ')
+            .'. De overige plekken staan bij Open diensten.';
+    }
+
     /** Patronen uit old() terug naar de beginstand van de editor (na een validatiefout). */
     private function oldPatterns(mixed $patterns): array
     {
@@ -178,6 +195,16 @@ class TaskTemplateController extends Controller
             'patterns.*.rrule' => 'code',
             'patterns.*.starts_on' => 'telt vanaf',
         ]);
+
+        // Vaste krachten die (een deel van) de diensten niet kunnen draaien: eerst waarschuwen.
+        $this->staffing = $this->staffCheck->forTemplate(
+            FixedStaffCheck::draft($building, ['skip_holidays' => $request->boolean('skip_holidays')] + $data),
+            $data['employees'] ?? [],
+            $template->exists ? $template->id : null,
+        );
+        if (FixedStaffCheck::needsConfirmation($this->staffing) && ! $request->boolean('confirm_staffing')) {
+            throw ValidationException::withMessages(['staffing' => FixedStaffCheck::messages($this->staffing)]);
+        }
 
         $template->fill(collect($data)->except(['skills', 'employees', 'patterns'])->all());
         $template->skip_holidays = $request->boolean('skip_holidays');

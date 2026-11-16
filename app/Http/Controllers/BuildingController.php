@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\Shift;
 use App\Services\Audit;
 use App\Services\DutchHolidays;
+use App\Services\FixedStaffCheck;
 use App\Services\ShiftGenerator;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -24,7 +25,16 @@ class BuildingController extends Controller
             ->orderByDesc('active')->orderBy('name')
             ->get();
 
-        return view('buildings.index', compact('buildings'));
+        // Per pand: de diensten van vandaag en wie er nu is.
+        $now = CarbonImmutable::now();
+        $today = Shift::query()->active()
+            ->overlapping($now->startOfDay(), $now->startOfDay()->addDay())
+            ->with('assignments.employee:id,name,color')
+            ->orderBy('starts_at')
+            ->get()
+            ->groupBy('building_id');
+
+        return view('buildings.index', compact('buildings', 'today', 'now'));
     }
 
     public function create(): View
@@ -95,9 +105,9 @@ class BuildingController extends Controller
     /**
      * Bezettingstabel: vaste bezetting en aantal personen van alle taken van een pand in één keer opslaan.
      */
-    public function updateStaffing(Request $request, Building $building, ShiftGenerator $generator): RedirectResponse
+    public function updateStaffing(Request $request, Building $building, ShiftGenerator $generator, FixedStaffCheck $staffCheck): RedirectResponse
     {
-        $templates = $building->taskTemplates()->with('employees:id')->get()->keyBy('id');
+        $templates = $building->taskTemplates()->with(['employees:id', 'patterns', 'skills:id,name'])->get()->keyBy('id');
 
         $data = $request->validate([
             'staff' => ['array'],
@@ -111,34 +121,59 @@ class BuildingController extends Controller
             ->reject(fn ($id) => $templates->has((int) $id));
         abort_if($unknown->isNotEmpty(), 422, 'Onbekende taak voor dit pand.');
 
-        $changed = collect();
-        DB::transaction(function () use ($templates, $data, $building, $changed) {
-            foreach ($templates as $id => $template) {
-                $employeeIds = collect($data['fixed'][$id] ?? [])->map(fn ($e) => (int) $e)->unique()->values();
-                $staff = (int) ($data['staff'][$id] ?? $template->required_staff);
+        // Eerst bepalen wat er verandert; nieuwe vaste krachten toetsen we op beschikbaarheid, afwezigheid en overlap.
+        $changes = [];
+        $problems = [];
+        $notes = [];
+        foreach ($templates as $id => $template) {
+            $employeeIds = collect($data['fixed'][$id] ?? [])->map(fn ($e) => (int) $e)->unique()->values();
+            $staff = (int) ($data['staff'][$id] ?? $template->required_staff);
+            $current = $template->employees->pluck('id');
 
-                $sameStaff = $staff === $template->required_staff;
-                $sameEmployees = $employeeIds->sort()->values()->all() === $template->employees->pluck('id')->sort()->values()->all();
-                if ($sameStaff && $sameEmployees) {
-                    continue;
+            $sameStaff = $staff === $template->required_staff;
+            $sameEmployees = $employeeIds->sort()->values()->all() === $current->sort()->values()->all();
+            if ($sameStaff && $sameEmployees) {
+                continue;
+            }
+            $changes[$id] = [$template, $employeeIds, $staff];
+
+            $results = $staffCheck->forTemplate($template, $employeeIds->diff($current), $template->id);
+            foreach (FixedStaffCheck::messages($results) as $message) {
+                $problems[] = $template->name.' – '.$message;
+            }
+            foreach ($results as $r) {
+                if ($r['possible'] < $r['total']) {
+                    $notes[] = sprintf('%s staat op %d van de %d diensten van %s', $r['name'], $r['possible'], $r['total'], $template->name);
                 }
+            }
+        }
 
+        if ($problems !== [] && ! $request->boolean('confirm_staffing')) {
+            return redirect()->to(route('buildings.show', $building).'#bezetting')
+                ->withInput()
+                ->withErrors(['staffing' => $problems]);
+        }
+
+        DB::transaction(function () use ($changes, $building) {
+            foreach ($changes as [$template, $employeeIds, $staff]) {
                 $template->update(['required_staff' => $staff]);
                 $template->employees()->sync($employeeIds->mapWithKeys(fn ($e, $i) => [$e => ['position' => $i]])->all());
                 // Wie vast op een taak staat, kent het pand.
                 $building->employees()->syncWithoutDetaching($employeeIds->all());
-                $changed->push($template);
             }
         });
 
-        foreach ($changed as $template) {
+        foreach ($changes as [$template]) {
             $generator->regenerateTemplate($template);
         }
 
-        return redirect()->route('buildings.show', $building)->with('status', $changed->isEmpty()
+        $count = count($changes);
+
+        return redirect()->route('buildings.show', $building)->with('status', $count === 0
             ? 'Geen wijzigingen in de bezetting.'
             : sprintf('Bezetting opgeslagen voor %d %s. Toekomstige diensten zijn bijgewerkt (handmatig aangepaste diensten blijven staan).',
-                $changed->count(), $changed->count() === 1 ? 'taak' : 'taken'));
+                $count, $count === 1 ? 'taak' : 'taken')
+                .($notes === [] ? '' : ' Let op: '.collect($notes)->join('; ').'. De overige plekken staan bij Open diensten.'));
     }
 
     public function edit(Building $building): View

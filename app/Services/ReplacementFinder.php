@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Employee;
 use App\Models\Shift;
+use App\Support\Planning;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -34,22 +35,31 @@ class ReplacementFinder
                 'name' => $employee->name,
                 'color' => $employee->color,
                 'phone' => $contact ? $employee->phone : null,
+                'ink' => Planning::contrast($employee->color),
+                'initials' => Planning::initials($employee->name),
                 'week_hours' => $checks['week_hours'],
                 'reasons' => $this->reasons($checks),
                 'warnings' => $results[$employee->id]['warnings'],
+                // Wat deze medewerker die dag al doet: helpt inschatten of invallen praktisch past.
+                'day_shifts' => $this->checker->dayShifts($employee->id, $shift->starts_at, $shift->id),
             ];
 
             if ($checks['absent'] || $checks['overlap']) {
-                $excluded[] = $row;
+                $excluded[] = $row + ['fit' => 'excluded'];
 
                 continue;
             }
 
             $row['score'] = $this->score($checks);
+            // 'caution': inplannen kan, maar geeft een waarschuwing die bevestiging vraagt.
+            $row['fit'] = Planning::needsConfirmation($row['warnings']) ? 'caution' : 'good';
             $candidates[] = $row;
         }
 
         usort($candidates, fn ($a, $b) => [$b['score'], $a['week_hours'], $a['name']] <=> [$a['score'], $b['week_hours'], $b['name']]);
+        if (($candidates[0]['fit'] ?? null) === 'good') {
+            $candidates[0]['fit'] = 'best';
+        }
 
         return ['candidates' => $candidates, 'excluded' => $excluded];
     }
@@ -100,9 +110,10 @@ class ReplacementFinder
             ? ['ok' => true, 'text' => 'Heeft vereiste vaardigheden']
             : ['ok' => false, 'text' => 'Mist: '.implode(', ', $checks['missing_skills'])];
 
+        // 'soft': een minpunt, maar geen reden om iemand niet in te plannen.
         $reasons[] = $checks['knows_building']
             ? ['ok' => true, 'text' => 'Kent dit pand']
-            : ['ok' => false, 'text' => 'Kent pand niet'];
+            : ['ok' => false, 'soft' => true, 'text' => 'Kent pand niet'];
 
         $max = $checks['contract_max'];
         $hours = $this->num($checks['week_hours']).' → '.$this->num($checks['new_week_hours']).' u'

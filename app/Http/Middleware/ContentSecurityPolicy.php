@@ -13,7 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
  * - script-src: alleen eigen scripts. 'unsafe-eval' is nodig voor Alpine.js (x-data, @click).
  *   Inline scripts en inline onclick/onsubmit zijn niet toegestaan (zie resources/js/actions.js).
  * - style-src: 'unsafe-inline' is nodig voor style-attributen (kleuren van panden en medewerkers),
- *   Alpine (:style) en vis-timeline/FullCalendar, die stijlen in de pagina zetten.
+ *   Alpine (:style) en het roosterbord, dat posities en kleuren in de pagina zet.
  *
  * Met POETSPLOEG_CSP=report-only wordt de policy alleen gemeld (in de browserconsole), met
  * POETSPLOEG_CSP=uit helemaal niet meegestuurd.
@@ -42,13 +42,13 @@ class ContentSecurityPolicy
         // Tijdens `npm run dev` komen scripts, stijlen en de websocket van de Vite-server.
         $dev = Vite::isRunningHot() ? rtrim((string) file_get_contents(Vite::hotFile())) : null;
         $devWs = $dev ? preg_replace('#^http#', 'ws', $dev) : null;
-        $fonts = 'https://fonts.bunny.net'; // lettertype op de inlogpagina
 
         $directives = [
             'default-src' => ["'self'"],
             'script-src' => ["'self'", "'unsafe-eval'", $dev],
-            'style-src' => ["'self'", "'unsafe-inline'", $fonts, $dev],
-            'font-src' => ["'self'", 'data:', $fonts],
+            // Het lettertype zit in de eigen bundel; er is geen externe bron meer nodig.
+            'style-src' => ["'self'", "'unsafe-inline'", $dev],
+            'font-src' => ["'self'", 'data:', $dev],
             'img-src' => ["'self'", 'data:'],
             'connect-src' => ["'self'", $dev, $devWs],
             'object-src' => ["'none'"],

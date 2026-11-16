@@ -10,9 +10,13 @@ use App\Models\Skill;
 use App\Models\VacationBalance;
 use App\Services\Audit;
 use App\Services\AvailabilityEnforcer;
+use App\Services\ConflictChecker;
 use App\Services\EmployeeAccounts;
+use App\Services\EmployeeOverview;
 use App\Services\LeaveCounters;
 use App\Services\WeekAvailability;
+use App\Support\NowStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,7 +36,14 @@ class EmployeeController extends Controller
             ->orderBy('name')
             ->get();
 
-        return view('employees.index', compact('employees'));
+        $ids = $employees->pluck('id');
+
+        return view('employees.index', [
+            'employees' => $employees,
+            // Waar is iedereen nu, en hoeveel uur staat er deze week gepland.
+            'status' => NowStatus::forEmployees($ids),
+            'weekHours' => $ids->isEmpty() ? [] : app(ConflictChecker::class)->weekHours($ids, CarbonImmutable::today()),
+        ]);
     }
 
     public function create(): View
@@ -58,6 +69,22 @@ class EmployeeController extends Controller
 
         return $message.sprintf(' %s is van %d %s gehaald die buiten de beschikbaarheid vallen; die staan nu bij Open diensten.',
             $employee->name, $released->count(), $released->count() === 1 ? 'dienst' : 'diensten');
+    }
+
+    /** Profiel: waar is iemand nu, de week, afwezigheid en vaste taken. Bewerken gaat via edit(). */
+    public function show(Request $request, Employee $employee, EmployeeOverview $overview): View
+    {
+        $date = rescue(fn () => CarbonImmutable::parse((string) $request->query('week', 'today')), null, false);
+        $employee->load(['fixedTemplates.building:id,name,color', 'fixedTemplates.patterns', 'user']);
+
+        return view('employees.show', [
+            'employee' => $employee,
+            'overview' => $overview->build($employee, $date),
+            'fixedTemplates' => $employee->fixedTemplates->where('active', true)->sortBy(fn ($t) => [$t->building->name, $t->start_time])->values(),
+            'counterYear' => $year = (int) now()->year,
+            'counters' => app(LeaveCounters::class)->counters($employee, $year),
+            'balance' => app(LeaveCounters::class)->balance($employee, $year),
+        ]);
     }
 
     public function edit(Employee $employee): View

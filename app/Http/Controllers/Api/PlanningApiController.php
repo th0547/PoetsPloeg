@@ -7,6 +7,7 @@ use App\Models\Absence;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Shift;
+use App\Models\Skill;
 use App\Services\AbsenceService;
 use App\Services\ConflictChecker;
 use App\Services\DutchHolidays;
@@ -26,14 +27,14 @@ class PlanningApiController extends Controller
     ) {}
 
     /**
-     * Gegevens voor de Gantt-weergave, gegroepeerd per medewerker of per pand.
+     * Gegevens voor het roosterbord: één gestructureerde payload voor alle weergaven
+     * (per medewerker, per pand, kalender; dag, week en maand). De opmaak gebeurt in de browser.
      */
     public function timeline(Request $request): JsonResponse
     {
         $data = $request->validate([
             'from' => ['required', 'date'],
             'to' => ['required', 'date', 'after_or_equal:from'],
-            'view' => ['required', 'in:employee,building'],
         ]);
         $from = CarbonImmutable::parse($data['from'])->startOfDay();
         $to = CarbonImmutable::parse($data['to'])->startOfDay();
@@ -44,108 +45,168 @@ class PlanningApiController extends Controller
 
         $shifts = Shift::query()->active()
             ->overlapping($from, $toExclusive)
-            ->with(['building:id,name,color', 'assignments.employee:id,name,color', 'skills:id,name'])
+            ->with(['building:id,name,short_name,color', 'assignments.employee:id,name,color', 'skills:id,name'])
             ->orderBy('starts_at')
             ->get();
         $warnings = $this->checker->forShifts($shifts);
 
-        $items = [];
-        $groups = [];
+        $employees = Employee::query()
+            ->where(fn ($q) => $q->where('active', true)
+                ->orWhereIn('id', $shifts->flatMap->assignments->pluck('employee_id')))
+            ->with(['skills:id', 'buildings:id', 'availabilityPatterns', 'availabilityDays'])
+            ->orderBy('name')
+            ->get();
 
-        if ($data['view'] === 'employee') {
-            $employees = Employee::query()
-                ->where(fn ($q) => $q->where('active', true)
-                    ->orWhereIn('id', $shifts->flatMap->assignments->pluck('employee_id')))
-                ->orderBy('name')
-                ->get();
+        $buildings = Building::query()
+            ->where(fn ($q) => $q->where('active', true)->orWhereIn('id', $shifts->pluck('building_id')))
+            ->orderBy('name')
+            ->get();
 
-            $hours = [];
-            foreach ($shifts as $shift) {
-                foreach ($shift->assignments as $a) {
-                    $hours[$a->employee_id] = ($hours[$a->employee_id] ?? 0) + $shift->durationHours();
-                }
-            }
+        $absences = Absence::query()->notRejected()
+            ->where('starts_at', '<', $toExclusive)->where('ends_at', '>', $from)
+            ->orderBy('starts_at')
+            ->get();
 
-            $groups[] = ['id' => 'open', 'content' => '<strong>Open diensten</strong>', 'className' => 'group-open'];
-            $isWeek = $from->diffInDays($to) <= 6;
-            foreach ($employees as $employee) {
-                $planned = Planning::hours($hours[$employee->id] ?? 0);
-                $contract = $isWeek && $employee->contract_hours_max ? ' / '.Planning::hours($employee->contract_hours_max) : '';
-                $over = $isWeek && $employee->contract_hours_max && ($hours[$employee->id] ?? 0) > $employee->contract_hours_max;
-                $groups[] = [
-                    'id' => $employee->id,
-                    'content' => sprintf(
-                        '<span class="group-dot" style="background:%s"></span>%s <small class="%s">%s%s u</small>',
-                        e($employee->color), e($employee->name), $over ? 'text-red-600 font-semibold' : 'text-gray-500', $planned, $contract,
-                    ),
-                ];
-            }
-
-            foreach ($shifts as $shift) {
-                foreach ($shift->assignments as $a) {
-                    $w = $warnings[$shift->id][$a->employee_id] ?? [];
-                    $items[] = $this->item($shift, "a-{$shift->id}-{$a->employee_id}", $a->employee_id, $shift->building->name.' · '.$shift->title, $w) + [
-                        'employeeId' => $a->employee_id,
-                    ];
-                }
-                for ($i = 0; $i < $shift->openSlots(); $i++) {
-                    $items[] = $this->item($shift, "o-{$shift->id}-{$i}", 'open', $shift->building->name.' · '.$shift->title, [], 'item-open') + [
-                        'employeeId' => null,
-                    ];
-                }
-            }
-
-            $absences = Absence::query()->notRejected()->with('employee:id,name')
-                ->where('starts_at', '<', $toExclusive)->where('ends_at', '>', $from)->get();
-            foreach ($absences as $absence) {
-                $label = $absence->typeLabel().($absence->isPending() ? ' (in afwachting)' : '');
-                $items[] = [
-                    'id' => 'abs-'.$absence->id,
-                    'group' => $absence->employee_id,
-                    'start' => $absence->starts_at->toIso8601String(),
-                    'end' => $absence->ends_at->toIso8601String(),
-                    'type' => 'background',
-                    'className' => $absence->isPending() ? 'bg-request' : 'bg-absence',
-                    'content' => e($label),
-                    'title' => e($absence->employee->name.': '.$label),
-                ];
-            }
-        } else {
-            $buildings = Building::query()
-                ->where(fn ($q) => $q->where('active', true)->orWhereIn('id', $shifts->pluck('building_id')))
-                ->orderBy('name')->get();
-            foreach ($buildings as $building) {
-                $groups[] = [
-                    'id' => $building->id,
-                    'content' => sprintf('<span class="group-dot" style="background:%s"></span>%s', e($building->color), e($building->name)),
-                ];
-            }
-
-            foreach ($shifts as $shift) {
-                $all = collect($warnings[$shift->id] ?? [])->flatten(1)->all();
-                $names = $shift->assignments->map(fn ($a) => $a->employee->name)->implode(', ');
-                $label = $shift->title.': '.($names ?: '—');
-                $extra = $shift->openSlots() > 0 ? 'item-has-open' : '';
-                $item = $this->item($shift, "s-{$shift->id}", $shift->building_id, $label, $all, $extra);
-                if ($shift->openSlots() > 0) {
-                    $item['content'] .= sprintf(' <span class="badge-open">%d open</span>', $shift->openSlots());
-                }
-                $items[] = $item + ['employeeId' => null, 'editable' => ['updateTime' => true, 'updateGroup' => false, 'remove' => false]];
-            }
-        }
-
-        foreach ($this->holidays->between($from, $to) as $date => $name) {
-            $items[] = [
-                'id' => 'hol-'.$date,
-                'start' => $date,
-                'end' => CarbonImmutable::parse($date)->addDay()->toDateString(),
-                'type' => 'background',
-                'className' => 'bg-holiday',
-                'content' => e($name),
+        $holidays = $this->holidays->between($from, $to);
+        $days = [];
+        for ($day = $from; $day->lte($to); $day = $day->addDay()) {
+            $days[] = [
+                'date' => $day->toDateString(),
+                'holiday' => $holidays[$day->toDateString()] ?? null,
             ];
         }
 
-        return response()->json(['groups' => $groups, 'items' => $items]);
+        $now = CarbonImmutable::now();
+
+        return response()->json([
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'today' => $now->toDateString(),
+            'now_min' => Planning::minutes($now),
+            'days' => $days,
+            'employees' => $employees->map(fn (Employee $e) => [
+                'id' => $e->id,
+                'name' => $e->name,
+                'color' => $e->color,
+                'initials' => Planning::initials($e->name),
+                'active' => $e->active,
+                'contract_min' => $e->contract_hours_min,
+                'contract_max' => $e->contract_hours_max,
+                'skills' => $e->skills->pluck('id')->all(),
+                'buildings' => $e->buildings->pluck('id')->all(),
+            ])->values(),
+            'buildings' => $buildings->map(fn (Building $b) => [
+                'id' => $b->id,
+                'name' => $b->name,
+                'short' => $b->shortLabel(),
+                'color' => $b->color,
+                'city' => $b->city,
+            ])->values(),
+            'skills' => Skill::orderBy('name')->get(['id', 'name']),
+            'shifts' => $shifts->map(fn (Shift $s) => $this->shiftRow($s, $warnings[$s->id] ?? []))->values(),
+            'absences' => $absences->map(fn (Absence $a) => [
+                'id' => $a->id,
+                'employee_id' => $a->employee_id,
+                'label' => $a->typeLabel(),
+                'kind' => $a->leaveType()['counts_as'] ?? null,
+                'pending' => $a->isPending(),
+                'from_day' => $a->starts_at->toDateString(),
+                'to_day' => $a->ends_at->toDateString(),
+                'from_min' => Planning::minutes($a->starts_at),
+                'to_min' => $a->ends_at->format('H:i') === '23:59' ? 1440 : Planning::minutes($a->ends_at),
+                'url' => route('absences.show', $a),
+            ])->values(),
+            // Tijden waarop iemand volgens de opgegeven beschikbaarheid niet kan (alleen bij korte periodes).
+            'unavailable' => $from->diffInDays($to) <= 14 ? $this->unavailable($employees, $from, $to) : (object) [],
+        ]);
+    }
+
+    /**
+     * @param  array<int, list<array>>  $warnings  per medewerker
+     */
+    private function shiftRow(Shift $shift, array $warnings): array
+    {
+        $startMin = Planning::minutes($shift->starts_at);
+
+        return [
+            'id' => $shift->id,
+            'building_id' => $shift->building_id,
+            'title' => $shift->title,
+            // Dag en tijden in Nederlandse tijd, ongeacht de tijdzone van de browser.
+            'day' => $shift->starts_at->toDateString(),
+            'start' => $shift->starts_at->format('H:i'),
+            'end' => $shift->ends_at->format('H:i'),
+            'start_min' => $startMin,
+            'end_min' => $startMin + (int) $shift->starts_at->diffInMinutes($shift->ends_at),
+            'hours' => $shift->durationHours(),
+            'required' => $shift->required_staff,
+            'open' => $shift->openSlots(),
+            'extra' => $shift->extraStaff(),
+            'modified' => $shift->is_modified,
+            'one_off' => $shift->task_template_id === null,
+            'notes' => filled($shift->notes),
+            'skills' => $shift->skills->pluck('name')->all(),
+            'level' => Planning::worstLevel(collect($warnings)->flatten(1)->all()),
+            'assignments' => $shift->assignments->map(fn ($a) => [
+                'employee_id' => $a->employee_id,
+                'source' => $a->source,
+                'level' => Planning::worstLevel($warnings[$a->employee_id] ?? []),
+                'warnings' => collect($warnings[$a->employee_id] ?? [])->map(fn ($w) => ['level' => $w['level'], 'message' => $w['message']])->all(),
+            ])->values(),
+        ];
+    }
+
+    /**
+     * Per medewerker per dag wat de opgegeven beschikbaarheid zegt: een korte tekst ("kan 16:00–23:00",
+     * "kan niet 08:00–15:00 · School") en de tijdvakken (minuten vanaf middernacht) waarop hij of zij niet kan.
+     *
+     * @return array<int, array<string, array{hint: string, whole: bool, blocks: list<array{from: int, to: int, note: ?string}>}>>
+     */
+    private function unavailable($employees, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $time = fn (int $m) => sprintf('%02d:%02d', intdiv($m % 1440, 60), $m % 60);
+        $range = fn (array $w) => $time($w['from']).'–'.$time($w['to']);
+
+        $result = [];
+        foreach ($employees as $employee) {
+            $schedule = $employee->availabilitySchedule();
+            if ($schedule->isEmpty()) {
+                continue;
+            }
+            for ($day = $from; $day->lte($to); $day = $day->addDay()) {
+                $free = $schedule->freeMinutes($day);
+                $info = $schedule->windowsOn($day);
+                $can = collect($info['windows'])->where('type', 'available')->sortBy('from')->values();
+                $cannot = collect($info['windows'])->where('type', 'unavailable')->sortBy('from')->values();
+
+                $blocks = [];
+                $start = null;
+                for ($m = 0; $m <= 1440; $m++) {
+                    $busy = $m < 1440 && ! $free[$m];
+                    if ($busy && $start === null) {
+                        $start = $m;
+                    } elseif (! $busy && $start !== null) {
+                        $note = $cannot->first(fn ($w) => $w['from'] < $m && $w['to'] > $start)['note'] ?? null;
+                        $blocks[] = ['from' => $start, 'to' => $m, 'note' => $note];
+                        $start = null;
+                    }
+                }
+                if ($blocks === []) {
+                    continue;
+                }
+
+                $whole = count($blocks) === 1 && $blocks[0]['from'] === 0 && $blocks[0]['to'] === 1440;
+                $note = $cannot->pluck('note')->filter()->unique()->implode(', ');
+                $hint = match (true) {
+                    $whole => 'kan niet'.($note ? ' · '.$note : ''),
+                    $info['rest'] === 'unavailable' => 'kan '.$can->map($range)->implode(', '),
+                    default => 'kan niet '.$cannot->map($range)->implode(', ').($note ? ' · '.$note : ''),
+                };
+                $result[$employee->id][$day->toDateString()] = ['hint' => $hint, 'whole' => $whole, 'blocks' => $blocks];
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -158,15 +219,22 @@ class PlanningApiController extends Controller
             'from_employee_id' => ['nullable', 'exists:employees,id'],
             'to_employee_id' => ['nullable', 'exists:employees,id'],
             'shift_days' => ['nullable', 'integer', 'between:-366,366'],
-            'starts_at' => ['required_without:shift_days', 'date'],
-            'ends_at' => ['required_without:shift_days', 'date', 'after:starts_at'],
+            // Lokale (Nederlandse) tijden uit het rooster; eventueel samen met shift_days.
+            'start_time' => ['nullable', 'date_format:H:i', 'required_with:end_time'],
+            'end_time' => ['nullable', 'date_format:H:i', 'required_with:start_time', 'different:start_time'],
+            'starts_at' => ['required_without_all:shift_days,start_time', 'date'],
+            'ends_at' => ['required_without_all:shift_days,start_time', 'date', 'after:starts_at'],
             'confirm' => ['boolean'],
         ]);
 
         $shift = Shift::with(['skills', 'assignments.employee'])->findOrFail($data['shift_id']);
         $from = isset($data['from_employee_id']) ? (int) $data['from_employee_id'] : null;
         $to = isset($data['to_employee_id']) ? (int) $data['to_employee_id'] : null;
-        if (isset($data['shift_days'])) {
+        if (isset($data['start_time'])) {
+            // Dagweergave: nieuwe lokale tijden, eventueel op een andere dag.
+            $day = CarbonImmutable::instance($shift->starts_at)->startOfDay()->addDays((int) ($data['shift_days'] ?? 0));
+            [$startsAt, $endsAt] = ShiftGenerator::timesFor($day, $data['start_time'], $data['end_time']);
+        } elseif (isset($data['shift_days'])) {
             // Week-/maandweergave: dienst een aantal dagen opschuiven met dezelfde (lokale) tijden.
             $startsAt = CarbonImmutable::instance($shift->starts_at)->addDays((int) $data['shift_days']);
             $endsAt = CarbonImmutable::instance($shift->ends_at)->addDays((int) $data['shift_days']);
@@ -228,79 +296,5 @@ class PlanningApiController extends Controller
         app(AbsenceService::class)->evaluateForShift($shift);
 
         return response()->json(['ok' => true, 'warnings' => $warnings]);
-    }
-
-    /**
-     * Gebeurtenissen voor de maandkalender (FullCalendar).
-     */
-    public function calendar(Request $request): JsonResponse
-    {
-        $data = $request->validate(['start' => ['required', 'date'], 'end' => ['required', 'date']]);
-        $from = CarbonImmutable::parse($data['start'])->startOfDay();
-        $to = CarbonImmutable::parse($data['end'])->startOfDay();
-        abort_if($from->diffInDays($to) > 62, 422, 'Periode te lang.');
-
-        $this->generator->generate($from, $to->subDay());
-
-        $events = Shift::query()->active()->overlapping($from, $to)
-            ->with(['building:id,name,color'])->withCount('assignments')
-            ->orderBy('starts_at')->get()
-            ->map(fn (Shift $s) => [
-                'id' => 'shift-'.$s->id,
-                'title' => sprintf('%s %s · %s (%d/%d)', $s->starts_at->format('H:i'), $s->building->name, $s->title, $s->assignments_count, $s->required_staff),
-                'start' => $s->starts_at->toIso8601String(),
-                'end' => $s->ends_at->toIso8601String(),
-                'color' => $s->building->color,
-                'classNames' => $s->assignments_count < $s->required_staff ? ['ev-open'] : [],
-                'extendedProps' => ['shiftId' => $s->id],
-            ])->all();
-
-        $absences = Absence::query()->notRejected()->with('employee:id,name')
-            ->where('starts_at', '<', $to)->where('ends_at', '>', $from)->get();
-        foreach ($absences as $a) {
-            $events[] = [
-                'id' => 'abs-'.$a->id,
-                'title' => $a->employee->name.' – '.strtolower($a->typeLabel()).($a->isPending() ? ' (in afwachting)' : ''),
-                'start' => $a->starts_at->toDateString(),
-                'end' => $a->ends_at->addDay()->toDateString(),
-                'allDay' => true,
-                'color' => match (true) {
-                    $a->isPending() => '#d97706',
-                    $a->type === 'ziek' => '#dc2626',
-                    default => '#6b7280',
-                },
-                'classNames' => ['ev-absence'],
-            ];
-        }
-
-        foreach ($this->holidays->between($from, $to->subDay()) as $date => $name) {
-            $events[] = ['id' => 'hol-'.$date, 'title' => $name, 'start' => $date, 'allDay' => true, 'display' => 'background', 'color' => '#fde68a'];
-            $events[] = ['id' => 'holt-'.$date, 'title' => '🎉 '.$name, 'start' => $date, 'allDay' => true, 'color' => '#b45309', 'classNames' => ['ev-holiday']];
-        }
-
-        return response()->json($events);
-    }
-
-    private function item(Shift $shift, string $id, int|string $group, string $label, array $warnings, string $extraClass = ''): array
-    {
-        $level = Planning::worstLevel($warnings);
-        $title = collect($warnings)->pluck('message')->prepend(
-            $shift->starts_at->format('H:i').'–'.$shift->ends_at->format('H:i').' '.$shift->building->name.' · '.$shift->title
-        )->implode("\n");
-
-        return [
-            'id' => $id,
-            'shiftId' => $shift->id,
-            'group' => $group,
-            'start' => $shift->starts_at->toIso8601String(),
-            'end' => $shift->ends_at->toIso8601String(),
-            'day' => $shift->starts_at->toDateString(),
-            'startLabel' => $shift->starts_at->format('H:i'),
-            'endLabel' => $shift->ends_at->format('H:i'),
-            'content' => e($label),
-            'title' => e($title),
-            'className' => trim(implode(' ', array_filter([$extraClass, $level ? 'lvl-'.$level : null]))),
-            'style' => 'border-left: 4px solid '.e($shift->building->color),
-        ];
     }
 }

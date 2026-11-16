@@ -130,33 +130,38 @@ class AbsenceController extends Controller
         return redirect($target)->with('status', $message);
     }
 
+    /**
+     * Het vervangscherm: alle diensten die door deze afwezigheid een vervanger nodig hebben, met per
+     * dienst de beste kandidaten. Voor directe uitval (ziek) en voor verlofverzoeken.
+     */
     public function show(Absence $absence, AbsenceService $service): View
     {
         $absence->load('employee');
-
-        // Een verzoek (in afwachting of afgewezen), of een goedgekeurd verzoek waarvoor diensten vervangen zijn.
-        if ($absence->status !== 'approved' || $absence->shifts()->exists()) {
+        if ($absence->isPending()) {
             $service->evaluate($absence);
             $absence->refresh();
-
-            return view('absences.request', [
-                'absence' => $absence,
-                'rows' => $service->requestShifts($absence),
-            ]);
         }
 
-        // Alle diensten in deze periode met open plekken, zodat de planner direct vervangers kan zoeken.
-        $openShifts = Shift::query()->active()
-            ->overlapping($absence->starts_at, $absence->ends_at)
-            ->where('ends_at', '>', now())
-            ->withCount('assignments')
-            ->with('building')
-            ->orderBy('starts_at')
-            ->get()
-            ->filter(fn (Shift $s) => $s->assignments_count < $s->required_staff)
-            ->values();
+        $rows = $service->requestShifts($absence);
+        $linked = $rows->isNotEmpty();
+        if (! $linked && $absence->status === 'approved') {
+            // Oudere registratie, van vóór het vastleggen van de vrijgemaakte diensten: toon alle
+            // open diensten in de periode.
+            $rows = Shift::query()->active()->understaffed()
+                ->overlapping($absence->starts_at, $absence->ends_at)
+                ->where('ends_at', '>', now())
+                ->with(['building', 'assignments.employee'])
+                ->orderBy('starts_at')
+                ->get()
+                ->map(fn (Shift $shift) => ['shift' => $shift, 'state' => 'open']);
+        }
 
-        return view('absences.show', compact('absence', 'openShifts'));
+        return view('absences.show', [
+            'absence' => $absence,
+            'rows' => $rows,
+            // Bij een gekoppelde lijst weten we welke diensten van deze medewerker waren.
+            'linked' => $linked,
+        ]);
     }
 
     /** CSV per medewerker per soort voor de loonadministratie (issue #44). */

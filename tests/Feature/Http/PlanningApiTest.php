@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Http;
 
+use App\Models\Absence;
 use App\Models\Employee;
 use App\Models\Shift;
 use App\Models\TaskTemplate;
@@ -19,33 +20,66 @@ class PlanningApiTest extends TestCase
         $this->actingAs(User::factory()->create());
     }
 
-    public function test_timeline_generates_shifts_and_returns_groups_and_items(): void
+    public function test_board_generates_shifts_and_returns_structured_data(): void
     {
-        $template = TaskTemplate::factory()->weekly([1, 3, 5])->create(['required_staff' => 2]);
-        $employee = Employee::factory()->create();
+        $template = TaskTemplate::factory()->weekly([1, 3, 5])->create(['required_staff' => 2, 'start_time' => '18:00', 'end_time' => '20:30']);
+        $employee = Employee::factory()->create(['name' => 'Anna Jansen', 'contract_hours_max' => 20]);
         $template->employees()->attach($employee);
 
-        $data = $this->getJson('/api/planning?from=2026-10-12&to=2026-10-18&view=employee')->assertOk()->json();
+        $data = $this->getJson('/api/planning?from=2026-10-12&to=2026-10-18')->assertOk()->json();
 
-        $this->assertSame('open', $data['groups'][0]['id']);
-        $this->assertSame($employee->id, $data['groups'][1]['id']);
-        $items = collect($data['items']);
-        $this->assertCount(3, $items->where('group', $employee->id));
-        $this->assertCount(3, $items->where('group', 'open'));
+        $this->assertSame('2026-10-12', $data['from']);
+        $this->assertCount(7, $data['days']);
+        $this->assertSame(['id' => $employee->id, 'name' => 'Anna Jansen', 'initials' => 'AJ', 'contract_max' => 20],
+            collect($data['employees'][0])->only(['id', 'name', 'initials', 'contract_max'])->all());
+        $this->assertSame($template->building_id, $data['buildings'][0]['id']);
+        $this->assertNotEmpty($data['buildings'][0]['short']);
 
-        $byBuilding = $this->getJson('/api/planning?from=2026-10-12&to=2026-10-18&view=building')->assertOk()->json();
-        $this->assertCount(3, collect($byBuilding['items'])->whereNotNull('shiftId'));
+        $shifts = collect($data['shifts']);
+        $this->assertCount(3, $shifts);
+        $first = $shifts->first();
+        // Dag en tijden in Nederlandse tijd, als minuten sinds middernacht.
+        $this->assertSame(['2026-10-12', '18:00', '20:30', 1080, 1230], [$first['day'], $first['start'], $first['end'], $first['start_min'], $first['end_min']]);
+        $this->assertSame(1, $first['open']);
+        $this->assertSame($employee->id, $first['assignments'][0]['employee_id']);
     }
 
-    public function test_calendar_returns_events(): void
+    public function test_board_contains_absences_and_availability_hints(): void
     {
-        TaskTemplate::factory()->weekly([5])->create();
+        $employee = Employee::factory()->create();
+        $employee->availabilityPatterns()->create(['weekday' => 1, 'type' => 'unavailable', 'start_time' => '08:00', 'end_time' => '15:00', 'note' => 'School']);
+        Absence::factory()->create([
+            'employee_id' => $employee->id, 'type' => 'ziek', 'starts_at' => '2026-10-13 00:00', 'ends_at' => '2026-10-14 23:59',
+        ]);
 
-        $events = $this->getJson('/api/calendar?start=2026-12-01&end=2027-01-01')->assertOk()->json();
+        $data = $this->getJson('/api/planning?from=2026-10-12&to=2026-10-18')->assertOk()->json();
 
-        // 4 vrijdagen, 25 dec wordt overgeslagen; plus feestdagen (achtergrond + label).
-        $this->assertCount(3, collect($events)->filter(fn ($e) => str_starts_with($e['id'], 'shift-')));
-        $this->assertNotEmpty(collect($events)->filter(fn ($e) => str_starts_with($e['id'], 'hol-')));
+        $absence = $data['absences'][0];
+        $this->assertSame([$employee->id, '2026-10-13', '2026-10-14', 0, 1440], [$absence['employee_id'], $absence['from_day'], $absence['to_day'], $absence['from_min'], $absence['to_min']]);
+        $monday = $data['unavailable'][$employee->id]['2026-10-12'];
+        $this->assertSame('kan niet 08:00–15:00 · School', $monday['hint']);
+        $this->assertSame([['from' => 480, 'to' => 900, 'note' => 'School']], $monday['blocks']);
+
+        // Bij een maand laten we de beschikbaarheid weg: te veel gegevens voor te weinig ruimte.
+        $month = $this->getJson('/api/planning?from=2026-10-01&to=2026-10-31')->assertOk()->json();
+        $this->assertSame([], $month['unavailable']);
+    }
+
+    public function test_old_calendar_link_redirects_to_the_planning(): void
+    {
+        $this->get('/kalender')->assertRedirect('/planning?view=calendar');
+    }
+
+    public function test_move_with_local_times_changes_the_shift(): void
+    {
+        $shift = Shift::factory()->at('2026-10-12', '18:00', '20:00')->create();
+
+        $this->postJson('/api/planning/move', ['shift_id' => $shift->id, 'shift_days' => 1, 'start_time' => '07:15', 'end_time' => '09:45'])
+            ->assertOk()->assertJson(['ok' => true]);
+
+        $shift->refresh();
+        $this->assertSame('2026-10-13 07:15', $shift->starts_at->format('Y-m-d H:i'));
+        $this->assertSame('2026-10-13 09:45', $shift->ends_at->format('Y-m-d H:i'));
     }
 
     public function test_move_to_other_employee_requires_confirmation_on_conflict(): void

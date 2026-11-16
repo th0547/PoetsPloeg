@@ -39,6 +39,9 @@ jobs:
       - name: Assets bouwen
         run: npm ci && npm run build
 
+      - name: Tests van het roosterbord (JavaScript)
+        run: npm test
+
       - name: Tests
         run: |
           cp .env.example .env

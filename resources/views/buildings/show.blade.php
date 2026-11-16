@@ -1,16 +1,49 @@
 <x-app-layout :title="$building->name">
     <x-slot name="header">
-        <div class="flex items-center gap-3">
-            <span class="h-4 w-4 rounded" style="background: {{ $building->color }}"></span>
-            <h1 class="page-title">{{ $building->name }}</h1>
-            @unless ($building->active) <span class="chip">inactief</span> @endunless
+        <div class="flex min-w-0 items-center gap-3">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white" style="background: {{ $building->color }}"><x-icon name="building" class="icon-lg" /></span>
+            <div class="min-w-0">
+                <h1 class="page-title truncate">{{ $building->name }} @unless ($building->active) <span class="badge badge-gray align-middle">inactief</span> @endunless</h1>
+                <p class="truncate text-sm text-gray-500">{{ $building->fullAddress() ?: 'Geen adres' }}</p>
+            </div>
         </div>
         <div class="flex flex-wrap gap-2">
-            <a href="{{ route('buildings.index') }}" class="btn-secondary">‹ Panden</a>
-            <a href="{{ route('buildings.edit', $building) }}" class="btn-secondary">Bewerken</a>
-            <a href="{{ route('shifts.create', ['pand' => $building->id]) }}" class="btn-secondary">+ Losse opdracht</a>
+            <a href="{{ route('buildings.index') }}" class="btn-ghost"><x-icon name="chevron-left" />Panden</a>
+            <a href="{{ route('planning', ['view' => 'building', 'range' => 'week', 'q' => $building->name]) }}" class="btn-secondary"><x-icon name="grid" />In planning</a>
+            <a href="{{ route('shifts.create', ['pand' => $building->id]) }}" class="btn-secondary"><x-icon name="plus" />Losse opdracht</a>
+            <a href="{{ route('buildings.edit', $building) }}" class="btn"><x-icon name="edit" />Bewerken</a>
         </div>
     </x-slot>
+
+    {{-- Nieuw pand: wat moet er nog gebeuren voordat de diensten vanzelf in de planning staan? --}}
+    @php
+        $hasTasks = $building->taskTemplates->isNotEmpty();
+        $hasStaff = $building->taskTemplates->contains(fn ($t) => $t->employees->isNotEmpty());
+    @endphp
+    @unless ($hasTasks && $hasStaff)
+        <ol class="card mb-6 grid gap-px overflow-hidden bg-gray-200 sm:grid-cols-3">
+            <li class="flex items-start gap-3 bg-white p-4">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-600 text-white"><x-icon name="check" /></span>
+                <div><p class="text-sm font-semibold text-gray-900">1. Pandgegevens</p><p class="text-xs text-gray-500">Adres, contact en toegang staan erin.</p></div>
+            </li>
+            <li class="flex items-start gap-3 bg-white p-4">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full {{ $hasTasks ? 'bg-teal-600 text-white' : 'bg-amber-100 text-amber-800 ring-2 ring-amber-300' }}">@if ($hasTasks)<x-icon name="check" />@else<span class="text-xs font-bold">2</span>@endif</span>
+                <div>
+                    <p class="text-sm font-semibold text-gray-900">2. Vaste taken</p>
+                    <p class="text-xs text-gray-500">Wat gebeurt er wanneer? Bijvoorbeeld dagelijkse schoonmaak ma t/m vr 18:00–20:00.</p>
+                    @unless ($hasTasks)<a href="{{ route('buildings.templates.create', $building) }}" class="btn btn-sm mt-2"><x-icon name="plus" class="icon-sm" />Eerste taak toevoegen</a>@endunless
+                </div>
+            </li>
+            <li class="flex items-start gap-3 bg-white p-4">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full {{ $hasStaff ? 'bg-teal-600 text-white' : ($hasTasks ? 'bg-amber-100 text-amber-800 ring-2 ring-amber-300' : 'bg-gray-100 text-gray-400') }}">@if ($hasStaff)<x-icon name="check" />@else<span class="text-xs font-bold">3</span>@endif</span>
+                <div>
+                    <p class="text-sm font-semibold text-gray-900">3. Vaste bezetting</p>
+                    <p class="text-xs text-gray-500">Wie staat er vast op? Je ziet direct of iemand op die tijden kan.</p>
+                    @if ($hasTasks && ! $hasStaff)<a href="#bezetting" class="btn btn-sm mt-2">Vaste krachten kiezen</a>@endif
+                </div>
+            </li>
+        </ol>
+    @endunless
 
     <div x-data @shift-panel-closed.window="if ($event.detail.changed) window.location.reload()" class="grid gap-6 lg:grid-cols-3">
         <div class="lg:col-span-2 space-y-6">
@@ -57,7 +90,6 @@
         <aside class="space-y-6">
             <section class="card card-body space-y-2 text-sm">
                 <h2 class="font-semibold text-gray-800">Pandinfo</h2>
-                <p>{{ $building->fullAddress() ?: 'Geen adres' }}</p>
                 @if ($building->contact_name || $building->contact_phone || $building->contact_email)
                     <p><span class="text-gray-500">Contact:</span> {{ $building->contact_name }}
                         @if ($building->contact_phone)<a href="tel:{{ $building->contact_phone }}" class="text-teal-700 hover:underline">{{ $building->contact_phone }}</a>@endif
@@ -75,7 +107,7 @@
                 <h2 class="font-semibold text-gray-800">Ingewerkt ({{ $building->employees->count() }})</h2>
                 <div class="flex flex-wrap gap-1">
                     @forelse ($building->employees as $employee)
-                        <a href="{{ route('employees.edit', $employee) }}" class="chip hover:bg-teal-50"><span class="me-1 h-2 w-2 rounded-full" style="background: {{ $employee->color }}"></span>{{ $employee->name }}</a>
+                        <a href="{{ route('employees.show', $employee) }}" data-open-employee="{{ $employee->id }}" class="chip hover:bg-teal-50"><span class="me-1 h-2 w-2 rounded-full" style="background: {{ $employee->color }}"></span>{{ $employee->name }}</a>
                     @empty
                         <p class="text-sm text-gray-500">Nog niemand.</p>
                     @endforelse
@@ -167,14 +199,22 @@
 
     {{-- Bezettingstabel: vaste bezetting van alle taken in één keer --}}
     @if ($building->taskTemplates->isNotEmpty())
+        @php
+            $hasOld = session()->hasOldInput('fixed') || session()->hasOldInput('staff');
+            $showAllStaff = $hasOld || empty($knownIds)
+                || $staffEmployees->contains(fn ($e) => ! in_array($e->id, $knownIds) && $building->taskTemplates->flatMap->employees->contains('id', $e->id));
+        @endphp
         <section class="card mt-6" id="bezetting"
-                 x-data="{ showAll: {{ $staffEmployees->contains(fn ($e) => ! in_array($e->id, $knownIds) && $building->taskTemplates->flatMap->employees->contains('id', $e->id)) || empty($knownIds) ? 'true' : 'false' }} }">
+                 x-data="staffingTable(@js(['url' => route('api.staffing.check'), 'buildingId' => $building->id, 'showAll' => $showAllStaff]))">
             <form method="POST" action="{{ route('buildings.staffing', $building) }}">
                 @csrf @method('PUT')
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
                     <div>
                         <h2 class="font-semibold text-gray-800">Vaste bezetting</h2>
-                        <p class="text-xs text-gray-500">Vink per taak aan wie er vast op staat. Na opslaan worden alle toekomstige diensten bijgewerkt. Handmatig aangepaste diensten blijven ongewijzigd.</p>
+                        <p class="text-xs text-gray-500">Vink per taak aan wie er vast op staat. Het bolletje laat zien of iemand de diensten van de komende {{ config('poetsploeg.generate_weeks_ahead') }} weken kan draaien:
+                            <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>kan alles</span>,
+                            <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-amber-500"></span>deels of let op</span>,
+                            <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-red-500"></span>kan niet</span>. Houd de muis erboven voor de reden.</p>
                     </div>
                     <div class="flex items-center gap-3">
                         @if (count($knownIds) && $staffEmployees->count() > count($knownIds))
@@ -185,6 +225,17 @@
                         <button type="submit" class="btn btn-sm">Bezetting opslaan</button>
                     </div>
                 </div>
+                @error('staffing')
+                    <div class="notice notice-warning m-4">
+                        <x-icon name="alert" class="mt-0.5 text-amber-600" />
+                        <div>
+                            <p class="font-medium">Niet iedereen kan alle diensten draaien:</p>
+                            <ul class="ms-5 mt-1 list-disc">@foreach ($errors->get('staffing') as $message)<li>{{ $message }}</li>@endforeach</ul>
+                            <p class="mt-1">Wie niet kan wordt op die diensten niet ingepland; de plek komt dan bij Open diensten.</p>
+                            <button type="submit" name="confirm_staffing" value="1" class="btn btn-sm mt-2">Toch opslaan</button>
+                        </div>
+                    </div>
+                @enderror
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead class="bg-gray-50">
@@ -204,8 +255,8 @@
                         </thead>
                         <tbody class="divide-y divide-gray-100">
                             @foreach ($building->taskTemplates as $template)
-                                @php($fixedIds = $template->employees->pluck('id')->all())
-                                <tr x-data="{ staff: {{ $template->required_staff }}, checked: {{ count($fixedIds) }} }" class="{{ $template->active ? '' : 'opacity-60' }}">
+                                @php($fixedIds = $hasOld ? array_map('intval', (array) old('fixed.'.$template->id, [])) : $template->employees->pluck('id')->all())
+                                <tr x-data="{ staff: {{ (int) old('staff.'.$template->id, $template->required_staff) }}, checked: {{ count($fixedIds) }} }" class="{{ $template->active ? '' : 'opacity-60' }}">
                                     <td class="sticky left-0 z-10 w-40 min-w-[9rem] bg-white px-3 py-2 align-top sm:w-auto sm:min-w-[14rem]">
                                         <div class="font-medium text-gray-900">{{ $template->name }}</div>
                                         <div class="text-xs text-gray-500">{{ $template->timesLabel() }} · {{ $template->recurrenceLabel() }}</div>
@@ -219,11 +270,16 @@
                                                class="w-16 rounded-md border-gray-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500" aria-label="Aantal personen {{ $template->name }}">
                                     </td>
                                     @foreach ($staffEmployees as $employee)
-                                        <td class="px-2 py-2 text-center align-top" @unless (in_array($employee->id, $knownIds)) x-show="showAll" @endunless>
-                                            <input type="checkbox" name="fixed[{{ $template->id }}][]" value="{{ $employee->id }}" class="checkbox h-5 w-5"
-                                                   aria-label="{{ $employee->name }} op {{ $template->name }}"
-                                                   @checked(in_array($employee->id, $fixedIds))
-                                                   @change="checked += $event.target.checked ? 1 : -1">
+                                        <td class="px-2 py-2 text-center align-top" @unless (in_array($employee->id, $knownIds)) x-show="showAll" @endunless
+                                            :title="title({{ $template->id }}, {{ $employee->id }})">
+                                            <span class="inline-flex flex-col items-center gap-1">
+                                                <input type="checkbox" name="fixed[{{ $template->id }}][]" value="{{ $employee->id }}" class="checkbox h-5 w-5"
+                                                       aria-label="{{ $employee->name }} op {{ $template->name }}"
+                                                       data-template="{{ $template->id }}" data-task="{{ $template->name }}"
+                                                       @checked(in_array($employee->id, $fixedIds))
+                                                       @change="checked += $event.target.checked ? 1 : -1">
+                                                <span class="h-2 w-2 rounded-full" :class="dot({{ $template->id }}, {{ $employee->id }})"></span>
+                                            </span>
                                         </td>
                                     @endforeach
                                 </tr>

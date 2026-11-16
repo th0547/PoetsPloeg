@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Building;
 use App\Models\Shift;
+use App\Services\FixedStaffCheck;
 use App\Services\ShiftGenerator;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ class OpenShiftController extends Controller
 {
     public const PERIODS = [1 => '1 week', 2 => '2 weken', 4 => '4 weken', 8 => '8 weken'];
 
-    public function __invoke(Request $request, ShiftGenerator $generator): View
+    public function __invoke(Request $request, ShiftGenerator $generator, FixedStaffCheck $fixedStaff): View
     {
         $weeks = array_key_exists($request->integer('weken'), self::PERIODS) ? $request->integer('weken') : 2;
         $buildingId = $request->integer('pand') ?: null;
@@ -33,7 +34,11 @@ class OpenShiftController extends Controller
             ->orderBy('starts_at')
             ->get();
 
+        // Waarom staat de plek open? Bij vaste taken: wat er met de vaste kracht is.
+        $missing = $shifts->mapWithKeys(fn (Shift $s) => [$s->id => $fixedStaff->missingOn($s)])->filter()->all();
+
         return view('shifts.open', [
+            'missing' => $missing,
             'days' => $shifts->groupBy(fn (Shift $s) => $s->starts_at->toDateString()),
             'shiftCount' => $shifts->count(),
             'slotCount' => $shifts->sum(fn (Shift $s) => $s->openSlots()),
