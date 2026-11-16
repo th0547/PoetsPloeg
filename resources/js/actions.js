@@ -7,16 +7,32 @@
  *   <a data-submit-form>                         verstuurt het omliggende formulier (uitloggen)
  *   <button data-open-shift="12" data-candidates data-replace="3">
  *                                                opent het dienstpaneel (met vervangers, eventueel voor medewerker 3)
+ *   <a data-open-employee="5">                   opent het medewerkerpaneel (waar is iemand nu, dag en week)
+ *   <button data-open-palette>                   opent de zoekbalk (Ctrl+K)
+ *   <button data-print>                          drukt de pagina af
  */
+import { confirmDialog } from './ui/dialog';
+import { openEmployee } from './employee-panel';
 import { openShift } from './shift-panel';
 
 export default function registerActions(root = document) {
     root.addEventListener('submit', (event) => {
-        const message = event.target.closest('form[data-confirm]')?.dataset.confirm;
-        if (message && !window.confirm(message)) {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-        }
+        const form = event.target.closest('form[data-confirm]');
+        if (!form || form.dataset.confirmed === '1') return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const submitter = event.submitter;
+        confirmDialog({
+            title: form.dataset.confirmTitle || 'Weet je het zeker?',
+            body: form.dataset.confirm,
+            confirmLabel: form.dataset.confirmLabel || 'Ja, doorgaan',
+            danger: 'confirmDanger' in form.dataset || /verwijder|intrek|afwijz/i.test(form.dataset.confirm),
+        }).then((ok) => {
+            if (!ok) return;
+            form.dataset.confirmed = '1';
+            form.requestSubmit(submitter?.form === form ? submitter : undefined);
+        });
     }, true);
 
     root.addEventListener('change', (event) => {
@@ -37,6 +53,23 @@ export default function registerActions(root = document) {
         if (shift) {
             const { openShift: id, replace } = shift.dataset;
             openShift(Number(id), 'candidates' in shift.dataset, replace ? Number(replace) : null);
+            return;
+        }
+
+        const employee = event.target.closest('[data-open-employee]');
+        if (employee && !event.metaKey && !event.ctrlKey) {
+            event.preventDefault();
+            openEmployee(Number(employee.dataset.openEmployee), employee.dataset.date || null);
+            return;
+        }
+
+        if (event.target.closest('[data-open-palette]')) {
+            window.dispatchEvent(new CustomEvent('open-palette'));
+            return;
+        }
+
+        if (event.target.closest('[data-print]')) {
+            window.print();
         }
     });
 }

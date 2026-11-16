@@ -17,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias(['planner' => EnsureCanPlan::class, 'employee' => EnsureIsEmployee::class]);
         $middleware->web(append: [ContentSecurityPolicy::class, EnsureTwoFactor::class]);
+        // Voorkeur "zijbalk ingeklapt": door de browser gezet (resources/js/app.js), dus niet versleuteld.
+        $middleware->encryptCookies(except: ['pp_nav']);
 
         // Achter een https-proxy (Codespaces, Docker) de juiste host en https-links gebruiken.
         // Op de VPS leeg laten: daar staat nginx direct aan de buitenkant.

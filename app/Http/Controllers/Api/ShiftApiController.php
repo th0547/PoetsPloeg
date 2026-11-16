@@ -134,9 +134,10 @@ class ShiftApiController extends Controller
 
     private function present(Shift $shift): array
     {
-        $shift->load(['building', 'template', 'pattern', 'skills:id,name', 'assignments.employee:id,name,phone,color']);
+        $shift->load(['building', 'template.employees:id,name,color,active', 'pattern', 'skills:id,name', 'assignments.employee:id,name,phone,color']);
         $warnings = $this->checker->forShifts(collect([$shift]))[$shift->id] ?? [];
         $contact = Gate::allows('view-contact-details');
+        $now = now();
 
         return [
             'id' => $shift->id,
@@ -152,6 +153,8 @@ class ShiftApiController extends Controller
             'notes' => $shift->notes,
             'is_modified' => $shift->is_modified,
             'cancelled' => $shift->cancelled_at !== null,
+            'state' => $shift->ends_at->lte($now) ? 'done' : ($shift->starts_at->lte($now) ? 'now' : 'later'),
+            'fixed_missing' => $this->fixedMissing($shift),
             'template' => $shift->template ? [
                 'id' => $shift->template->id,
                 // Het patroon van deze dienst; bij oudere diensten (zonder patroon) alle patronen van de taak.
@@ -174,9 +177,44 @@ class ShiftApiController extends Controller
                 'name' => $a->employee->name,
                 'phone' => $contact ? $a->employee->phone : null,
                 'color' => $a->employee->color,
+                'ink' => Planning::contrast($a->employee->color),
+                'initials' => Planning::initials($a->employee->name),
                 'source' => ShiftAssignment::SOURCES[$a->source] ?? $a->source,
                 'warnings' => $warnings[$a->employee_id] ?? [],
             ])->values(),
         ];
+    }
+
+    /**
+     * Vaste krachten van de taak die niet op deze dienst staan, met de reden: zo is te zien waarom
+     * een dienst open staat (afwezig, kan niet op dit tijdvak, al ergens anders ingepland).
+     *
+     * @return list<array{employee_id: int, name: string, reason: string}>
+     */
+    private function fixedMissing(Shift $shift): array
+    {
+        if (! $shift->template || $shift->openSlots() === 0) {
+            return [];
+        }
+        $missing = $shift->template->employees
+            ->where('active', true)
+            ->whereNotIn('id', $shift->assignments->pluck('employee_id'))
+            ->take(max(1, $shift->required_staff));
+        if ($missing->isEmpty()) {
+            return [];
+        }
+
+        $checks = $this->checker->forCandidates($shift, $missing->pluck('id')->values());
+
+        return $missing->map(function (Employee $employee) use ($checks) {
+            $blocking = collect($checks[$employee->id]['warnings'] ?? [])
+                ->first(fn ($w) => in_array($w['type'], ['absent', 'overlap', 'availability'], true));
+
+            return [
+                'employee_id' => $employee->id,
+                'name' => $employee->name,
+                'reason' => $blocking['message'] ?? 'niet ingepland op deze dienst',
+            ];
+        })->values()->all();
     }
 }

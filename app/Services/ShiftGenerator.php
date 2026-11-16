@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\DB;
  */
 class ShiftGenerator
 {
+    /** @var array<int, list<array{0: CarbonImmutable, 1: CarbonImmutable}>> bezette tijdvakken per medewerker */
+    private array $busy = [];
+
     public function __construct(private DutchHolidays $holidays) {}
 
     /**
@@ -72,6 +75,20 @@ class ShiftGenerator
             ->where('ends_at', '>', $from)
             ->get()
             ->groupBy('employee_id');
+
+        // Wat de vaste krachten in deze periode al doen: een vaste kracht wordt niet dubbel ingepland.
+        // Nieuwe diensten uit deze ronde tellen meteen mee (zie createShift).
+        $this->busy = [];
+        DB::table('shift_assignments')
+            ->join('shifts', 'shifts.id', '=', 'shift_assignments.shift_id')
+            ->whereIn('shift_assignments.employee_id', $templates->flatMap->employees->pluck('id')->unique())
+            ->whereNull('shifts.cancelled_at')
+            ->where('shifts.starts_at', '<', $to->addDays(2))
+            ->where('shifts.ends_at', '>', $from)
+            ->get(['shift_assignments.employee_id', 'shifts.starts_at', 'shifts.ends_at'])
+            ->each(function ($row) {
+                $this->busy[$row->employee_id][] = [CarbonImmutable::parse($row->starts_at), CarbonImmutable::parse($row->ends_at)];
+            });
 
         $created = 0;
         DB::transaction(function () use ($templates, $from, $to, $existing, $absences, &$created) {
@@ -160,7 +177,8 @@ class ShiftGenerator
             $shift->skills()->attach($template->skills->pluck('id'));
         }
 
-        // Vaste bezetting invullen, behalve wie op dat moment afwezig is of volgens het weekpatroon niet kan.
+        // Vaste bezetting invullen, behalve wie op dat moment afwezig is, volgens het weekpatroon niet kan
+        // of al op een andere dienst staat. De plek blijft dan open (zie FixedStaffCheck voor de waarschuwing vooraf).
         $assigned = 0;
         foreach ($template->employees as $employee) {
             if ($assigned >= $template->required_staff) {
@@ -169,10 +187,14 @@ class ShiftGenerator
             $isAbsent = ($absences[$employee->id] ?? collect())->contains(
                 fn (Absence $a) => $a->starts_at->lt($endsAt) && $a->ends_at->gt($startsAt)
             );
-            if ($isAbsent || AvailabilityCheck::isOutside($employee, $startsAt, $endsAt)) {
+            $isBusy = collect($this->busy[$employee->id] ?? [])->contains(
+                fn (array $slot) => $slot[0]->lt($endsAt) && $slot[1]->gt($startsAt)
+            );
+            if ($isAbsent || $isBusy || AvailabilityCheck::isOutside($employee, $startsAt, $endsAt)) {
                 continue;
             }
             $shift->assignments()->create(['employee_id' => $employee->id, 'source' => 'fixed']);
+            $this->busy[$employee->id][] = [$startsAt, $endsAt];
             $assigned++;
         }
 

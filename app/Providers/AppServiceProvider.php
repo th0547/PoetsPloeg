@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Http\Controllers\OpenShiftController;
+use App\Models\Absence;
 use App\Models\User;
 use App\Services\Audit;
 use App\Support\Policy;
@@ -48,9 +49,11 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(Failed::class, fn (Failed $e) => Audit::log('auth.failed', 'Inloggen mislukt', $e->user,
             ['email' => mb_substr((string) ($e->credentials['email'] ?? ''), 0, 255)]));
 
-        // Teller "Open diensten" in het menu (alleen voor ingelogde planners).
+        // Tellers in het menu (alleen voor ingelogde planners): open plekken en verlofverzoeken.
         View::composer('layouts.navigation', function ($view) {
-            $view->with('openSlotCount', auth()->user()?->canPlan() ? OpenShiftController::upcomingOpenSlots() : 0);
+            $canPlan = (bool) auth()->user()?->canPlan();
+            $view->with('openSlotCount', $canPlan ? OpenShiftController::upcomingOpenSlots() : 0);
+            $view->with('pendingRequestCount', $canPlan ? Absence::query()->where('status', 'pending')->count() : 0);
         });
     }
 }

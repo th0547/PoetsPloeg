@@ -36,8 +36,8 @@ class PagesTest extends TestCase
         Skill::factory()->create();
 
         foreach ([
-            route('dashboard'), route('dashboard', ['datum' => '2026-10-12']), route('planning'), route('calendar'),
-            route('employees.index'), route('employees.create'), route('employees.edit', $employee),
+            route('dashboard'), route('dashboard', ['datum' => '2026-10-12']), route('planning'),
+            route('employees.index'), route('employees.create'), route('employees.edit', $employee), route('employees.show', $employee),
             route('buildings.index'), route('buildings.create'), route('buildings.show', $template->building),
             route('buildings.edit', $template->building),
             route('buildings.templates.create', $template->building), route('buildings.templates.edit', [$template->building, $template]),

@@ -95,6 +95,57 @@ class ConflictChecker
     }
 
     /**
+     * Toets meerdere (nog niet opgeslagen) tijdvakken tegelijk voor dezelfde medewerkers; de gegevens
+     * worden één keer geladen. Diensten van $ignoreTemplateId tellen niet mee als "dubbel ingepland":
+     * dat is de taak zelf, waarvan de diensten opnieuw worden opgebouwd.
+     *
+     * @param  Collection<int, Shift>  $shifts  met relatie skills gezet; mogen ongesaved zijn
+     * @param  Collection<int, int>  $employeeIds
+     * @return array<int, array<int, array{warnings: list<array>, checks: array}>> [index van de dienst][employee_id]
+     */
+    public function forOccurrences(Collection $shifts, Collection $employeeIds, ?int $ignoreTemplateId = null): array
+    {
+        if ($shifts->isEmpty() || $employeeIds->isEmpty()) {
+            return [];
+        }
+        $this->load($employeeIds, $shifts->min('starts_at'), $shifts->max('ends_at'), $ignoreTemplateId);
+
+        $result = [];
+        foreach ($shifts->values() as $i => $shift) {
+            foreach ($employeeIds as $id) {
+                $result[$i][$id] = $this->evaluate($shift, $id);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Andere diensten van een medewerker op deze dag, uit de laatst geladen gegevens
+     * (dus na forShifts(), forCandidates() of forOccurrences()).
+     *
+     * @return list<array{shift_id: int, start: string, end: string, building: string, title: string}>
+     */
+    public function dayShifts(int $employeeId, \DateTimeInterface $day, ?int $exceptShiftId = null): array
+    {
+        $day = CarbonImmutable::instance($day)->startOfDay();
+        $next = $day->addDay();
+
+        return ($this->assignments[$employeeId] ?? collect())
+            ->filter(fn ($a) => $a->shift_id !== $exceptShiftId && $a->starts_at->lt($next) && $a->ends_at->gt($day))
+            ->sortBy(fn ($a) => $a->starts_at->getTimestamp())
+            ->map(fn ($a) => [
+                'shift_id' => (int) $a->shift_id,
+                'start' => $a->starts_at->format('H:i'),
+                'end' => $a->ends_at->format('H:i'),
+                'building' => $a->building_name,
+                'title' => $a->title,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
      * Geplande uren per medewerker in de ISO-week die op weekStart begint.
      *
      * @return array<int, float>
@@ -107,7 +158,7 @@ class ConflictChecker
         return $employeeIds->mapWithKeys(fn ($id) => [$id => $this->hoursInWeek($id, $start)])->all();
     }
 
-    private function load(Collection $employeeIds, \DateTimeInterface $from, \DateTimeInterface $to): void
+    private function load(Collection $employeeIds, \DateTimeInterface $from, \DateTimeInterface $to, ?int $ignoreTemplateId = null): void
     {
         // Volledige ISO-weken laden voor de urentelling, plus een dag marge voor nachtdiensten.
         $windowStart = CarbonImmutable::instance($from)->startOfWeek()->subDay();
@@ -131,6 +182,9 @@ class ConflictChecker
             ->join('buildings', 'buildings.id', '=', 'shifts.building_id')
             ->whereIn('shift_assignments.employee_id', $employeeIds)
             ->whereNull('shifts.cancelled_at')
+            ->when($ignoreTemplateId, fn ($q) => $q->where(fn ($q) => $q
+                ->whereNull('shifts.task_template_id')
+                ->orWhere('shifts.task_template_id', '!=', $ignoreTemplateId)))
             ->where('shifts.starts_at', '<', $windowEnd)
             ->where('shifts.ends_at', '>', $windowStart)
             ->get([

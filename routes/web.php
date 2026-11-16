@@ -1,12 +1,14 @@
 <?php
 
 use App\Http\Controllers\AbsenceController;
+use App\Http\Controllers\Api\EmployeeApiController;
 use App\Http\Controllers\Api\PlanningApiController;
+use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\ShiftApiController;
+use App\Http\Controllers\Api\StaffingCheckController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AvailabilityOverviewController;
 use App\Http\Controllers\BuildingController;
-use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\HealthController;
@@ -35,14 +37,15 @@ Route::get('/.well-known/security.txt', SecurityTxtController::class)->name('sec
 Route::middleware(['auth', 'planner'])->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
     Route::get('/planning', PlanningController::class)->name('planning');
-    Route::get('/kalender', CalendarController::class)->name('calendar');
+    // De maandkalender is een weergave van het rooster geworden; oude links blijven werken.
+    Route::redirect('/kalender', '/planning?view=calendar')->name('calendar');
     Route::get('/open-diensten', OpenShiftController::class)->name('open-shifts');
 
     Route::get('/diensten/nieuw', [ShiftController::class, 'create'])->name('shifts.create');
     Route::post('/diensten', [ShiftController::class, 'store'])->name('shifts.store');
 
     Route::resource('medewerkers', EmployeeController::class)
-        ->parameters(['medewerkers' => 'employee'])->names('employees')->except('show');
+        ->parameters(['medewerkers' => 'employee'])->names('employees');
     Route::put('medewerkers/{employee}/beginsaldo', [EmployeeController::class, 'updateBalance'])->name('employees.balance');
     Route::post('medewerkers/{employee}/uitnodiging', [EmployeeController::class, 'resendInvitation'])
         ->middleware('throttle:10,1')->name('employees.invitation');
@@ -87,7 +90,9 @@ Route::middleware(['auth', 'planner'])->group(function () {
     Route::prefix('api')->name('api.')->group(function () {
         Route::get('planning', [PlanningApiController::class, 'timeline'])->name('planning');
         Route::post('planning/move', [PlanningApiController::class, 'move'])->name('planning.move');
-        Route::get('calendar', [PlanningApiController::class, 'calendar'])->name('calendar');
+        Route::get('search', SearchController::class)->middleware('throttle:120,1')->name('search');
+        Route::get('employees/{employee}', [EmployeeApiController::class, 'show'])->name('employees.show');
+        Route::post('staffing/check', StaffingCheckController::class)->middleware('throttle:120,1')->name('staffing.check');
         Route::post('recurrence/preview', [TaskTemplateController::class, 'preview'])
             ->middleware('throttle:60,1')->name('recurrence.preview');
 
