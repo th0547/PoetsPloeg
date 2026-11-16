@@ -11,7 +11,7 @@
         "laravel/framework": "^12.0",
         "laravel/tinker": "^3.1.0",
         "pragmarx/google2fa": "^8.0",
-        "rlanvin/php-rrule": "^2.5"
+        "rlanvin/php-rrule": "^3.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
