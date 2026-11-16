@@ -294,17 +294,58 @@
             </div>
         </div>
 
-        <div class="card card-body space-y-3">
-            <div>
-                <h2 class="font-semibold text-gray-800">Vaste bezetting</h2>
-                <p class="text-xs text-gray-500">Deze medewerkers worden automatisch op elke dienst van deze taak gezet (maximaal het aantal personen). Bij verlof blijft de plek open en kun je een vervanger zoeken.</p>
+        {{-- Vaste bezetting: bij elke medewerker staat of hij of zij de diensten van deze taak kan draaien
+             (beschikbaarheid, afwezigheid, andere diensten, contracturen). Zie resources/js/staffing.js. --}}
+        <div class="card card-body space-y-3" id="bezetting"
+             x-data="staffPicker(@js([
+                 'url' => route('api.staffing.check'),
+                 'buildingId' => $building->id,
+                 'templateId' => $template->exists ? $template->id : null,
+                 'selected' => $selectedEmployees,
+                 'serverWarned' => $errors->has('staffing'),
+             ]))">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h2 class="font-semibold text-gray-800">Vaste bezetting</h2>
+                    <p class="text-xs text-gray-500">Deze medewerkers worden automatisch op elke dienst van deze taak gezet (maximaal het aantal personen). Kan iemand een dienst niet draaien, dan blijft die plek open en zoek je een vervanger.</p>
+                </div>
+                <label class="inline-flex shrink-0 items-center gap-1.5 text-sm text-gray-600" x-show="total !== null" x-cloak>
+                    <input type="checkbox" class="checkbox" x-model="onlyFit"> Alleen wie alle diensten kan <span class="text-gray-400" x-text="'(' + fitCount() + ')'"></span>
+                </label>
             </div>
-            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <p class="text-xs text-gray-500" x-show="total !== null" x-cloak>
+                Getoetst op de <strong x-text="total"></strong> <span x-text="total === 1 ? 'dienst' : 'diensten'"></span> van de komende {{ config('poetsploeg.generate_weeks_ahead') }} weken: beschikbaarheid, afwezigheid, andere diensten en contracturen.
+                <span x-show="loading" class="text-gray-400">bijwerken…</span>
+            </p>
+            <p class="text-xs text-gray-500" x-show="total === null && !loading" x-cloak>Vul eerst de tijden en dagen in; dan zie je hier per medewerker of het past.</p>
+
+            @error('staffing')
+                <div class="notice notice-warning">
+                    <x-icon name="alert" class="mt-0.5 text-amber-600" />
+                    <div>
+                        <p class="font-medium">Niet iedereen kan alle diensten draaien:</p>
+                        <ul class="ms-5 mt-1 list-disc">@foreach ($errors->get('staffing') as $message)<li>{{ $message }}</li>@endforeach</ul>
+                        <label class="mt-2 inline-flex items-center gap-2 font-medium"><input type="checkbox" class="checkbox" x-model="confirmed"> Toch zo opslaan; open plekken vul ik zelf in</label>
+                    </div>
+                </div>
+            @enderror
+            <input type="hidden" name="confirm_staffing" :value="confirmed ? 1 : 0" value="0">
+
+            <div class="grid gap-2 sm:grid-cols-2">
                 @foreach ($sortedEmployees as $employee)
-                    <label class="inline-flex items-center gap-1.5 text-sm">
-                        <input type="checkbox" name="employees[]" value="{{ $employee->id }}" class="checkbox" @checked(in_array($employee->id, $selectedEmployees))>
-                        {{ $employee->name }}
-                        @if (in_array($employee->id, $knownIds))<span class="text-xs text-teal-700" title="Ingewerkt op dit pand">✓ pand</span>@endif
+                    <label class="flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2 hover:border-gray-300"
+                           x-show="visible({{ $employee->id }})"
+                           :class="selected.includes({{ $employee->id }}) ? (result({{ $employee->id }})?.status && result({{ $employee->id }}).status !== 'ok' ? 'border-amber-300 bg-amber-50/60' : 'border-teal-300 bg-teal-50/50') : 'border-gray-200'">
+                        <input type="checkbox" name="employees[]" value="{{ $employee->id }}" class="checkbox mt-0.5" x-model.number="selected" @checked(in_array($employee->id, $selectedEmployees))>
+                        <span class="min-w-0 flex-1">
+                            <span class="flex flex-wrap items-center gap-x-2 text-sm font-medium text-gray-900">
+                                {{ $employee->name }}
+                                @if (in_array($employee->id, $knownIds))<span class="text-xs font-normal text-teal-700" title="Ingewerkt op dit pand">✓ kent pand</span>@endif
+                            </span>
+                            <span class="block text-xs font-medium" :class="cls({{ $employee->id }})" x-text="result({{ $employee->id }})?.summary ?? ''"></span>
+                            <span class="block text-xs text-gray-600" x-show="detail({{ $employee->id }})" x-text="detail({{ $employee->id }})"></span>
+                        </span>
+                        <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" :class="dot({{ $employee->id }})"></span>
                     </label>
                 @endforeach
             </div>

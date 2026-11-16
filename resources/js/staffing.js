@@ -31,7 +31,7 @@ export default function staffPicker(config) {
         loading: false,
         onlyFit: false,
         selected: config.selected ?? [],
-        confirmed: !!config.confirmed,
+        confirmed: false,
         timer: null,
         request: 0,
 
@@ -111,7 +111,8 @@ export default function staffPicker(config) {
 
         async onSubmit(event, form) {
             const problems = this.problems();
-            if (this.confirmed || !problems.length) return;
+            // Na een waarschuwing van de server beslist het vinkje "Toch zo opslaan".
+            if (this.confirmed || !problems.length || config.serverWarned) return;
             event.preventDefault();
             if (await confirmProblems(problems)) {
                 this.confirmed = true;

@@ -10,10 +10,12 @@ use App\Models\Skill;
 use App\Models\VacationBalance;
 use App\Services\Audit;
 use App\Services\AvailabilityEnforcer;
+use App\Services\ConflictChecker;
 use App\Services\EmployeeAccounts;
 use App\Services\EmployeeOverview;
 use App\Services\LeaveCounters;
 use App\Services\WeekAvailability;
+use App\Support\NowStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,7 +36,14 @@ class EmployeeController extends Controller
             ->orderBy('name')
             ->get();
 
-        return view('employees.index', compact('employees'));
+        $ids = $employees->pluck('id');
+
+        return view('employees.index', [
+            'employees' => $employees,
+            // Waar is iedereen nu, en hoeveel uur staat er deze week gepland.
+            'status' => NowStatus::forEmployees($ids),
+            'weekHours' => $ids->isEmpty() ? [] : app(ConflictChecker::class)->weekHours($ids, CarbonImmutable::today()),
+        ]);
     }
 
     public function create(): View

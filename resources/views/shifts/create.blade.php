@@ -5,6 +5,7 @@
 
     <form method="POST" action="{{ route('shifts.store') }}" class="card card-body max-w-3xl space-y-4">
         @csrf
+        @if ($back)<input type="hidden" name="back" value="{{ $back }}">@endif
         <p class="text-sm text-gray-600">Voor eenmalig werk, zoals een opleveringsschoonmaak of extra schoonmaak na een evenement. Terugkerend werk leg je vast als vaste taak bij het pand.</p>
         <div class="grid gap-4 sm:grid-cols-6">
             <div class="sm:col-span-3">
@@ -48,11 +49,11 @@
             </div>
             <div class="sm:col-span-6">
                 <span class="label">Direct inplannen (optioneel)</span>
-                <p class="text-xs text-gray-500">Je kunt ook later via “Zoek vervanger / medewerker” de best passende medewerkers kiezen.</p>
+                <p class="text-xs text-gray-500">Je kunt ook later in de dienst zelf de best passende medewerkers kiezen; daar zie je wie beschikbaar is.</p>
                 <div class="mt-2 grid gap-2 sm:grid-cols-3">
                     @foreach ($employees as $employee)
                         <label class="inline-flex items-center gap-1.5 text-sm">
-                            <input type="checkbox" name="employees[]" value="{{ $employee->id }}" class="checkbox" @checked(in_array($employee->id, old('employees', [])))> {{ $employee->name }}
+                            <input type="checkbox" name="employees[]" value="{{ $employee->id }}" class="checkbox" @checked(in_array($employee->id, old('employees', array_filter([$selectedEmployee]))))> {{ $employee->name }}
                         </label>
                     @endforeach
                 </div>

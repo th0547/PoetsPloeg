@@ -167,14 +167,22 @@
 
     {{-- Bezettingstabel: vaste bezetting van alle taken in één keer --}}
     @if ($building->taskTemplates->isNotEmpty())
+        @php
+            $hasOld = session()->hasOldInput('fixed') || session()->hasOldInput('staff');
+            $showAllStaff = $hasOld || empty($knownIds)
+                || $staffEmployees->contains(fn ($e) => ! in_array($e->id, $knownIds) && $building->taskTemplates->flatMap->employees->contains('id', $e->id));
+        @endphp
         <section class="card mt-6" id="bezetting"
-                 x-data="{ showAll: {{ $staffEmployees->contains(fn ($e) => ! in_array($e->id, $knownIds) && $building->taskTemplates->flatMap->employees->contains('id', $e->id)) || empty($knownIds) ? 'true' : 'false' }} }">
+                 x-data="staffingTable(@js(['url' => route('api.staffing.check'), 'buildingId' => $building->id, 'showAll' => $showAllStaff]))">
             <form method="POST" action="{{ route('buildings.staffing', $building) }}">
                 @csrf @method('PUT')
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
                     <div>
                         <h2 class="font-semibold text-gray-800">Vaste bezetting</h2>
-                        <p class="text-xs text-gray-500">Vink per taak aan wie er vast op staat. Na opslaan worden alle toekomstige diensten bijgewerkt. Handmatig aangepaste diensten blijven ongewijzigd.</p>
+                        <p class="text-xs text-gray-500">Vink per taak aan wie er vast op staat. Het bolletje laat zien of iemand de diensten van de komende {{ config('poetsploeg.generate_weeks_ahead') }} weken kan draaien:
+                            <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>kan alles</span>,
+                            <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-amber-500"></span>deels of let op</span>,
+                            <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-red-500"></span>kan niet</span>. Houd de muis erboven voor de reden.</p>
                     </div>
                     <div class="flex items-center gap-3">
                         @if (count($knownIds) && $staffEmployees->count() > count($knownIds))
@@ -185,6 +193,17 @@
                         <button type="submit" class="btn btn-sm">Bezetting opslaan</button>
                     </div>
                 </div>
+                @error('staffing')
+                    <div class="notice notice-warning m-4">
+                        <x-icon name="alert" class="mt-0.5 text-amber-600" />
+                        <div>
+                            <p class="font-medium">Niet iedereen kan alle diensten draaien:</p>
+                            <ul class="ms-5 mt-1 list-disc">@foreach ($errors->get('staffing') as $message)<li>{{ $message }}</li>@endforeach</ul>
+                            <p class="mt-1">Wie niet kan wordt op die diensten niet ingepland; de plek komt dan bij Open diensten.</p>
+                            <button type="submit" name="confirm_staffing" value="1" class="btn btn-sm mt-2">Toch opslaan</button>
+                        </div>
+                    </div>
+                @enderror
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead class="bg-gray-50">
@@ -204,8 +223,8 @@
                         </thead>
                         <tbody class="divide-y divide-gray-100">
                             @foreach ($building->taskTemplates as $template)
-                                @php($fixedIds = $template->employees->pluck('id')->all())
-                                <tr x-data="{ staff: {{ $template->required_staff }}, checked: {{ count($fixedIds) }} }" class="{{ $template->active ? '' : 'opacity-60' }}">
+                                @php($fixedIds = $hasOld ? array_map('intval', (array) old('fixed.'.$template->id, [])) : $template->employees->pluck('id')->all())
+                                <tr x-data="{ staff: {{ (int) old('staff.'.$template->id, $template->required_staff) }}, checked: {{ count($fixedIds) }} }" class="{{ $template->active ? '' : 'opacity-60' }}">
                                     <td class="sticky left-0 z-10 w-40 min-w-[9rem] bg-white px-3 py-2 align-top sm:w-auto sm:min-w-[14rem]">
                                         <div class="font-medium text-gray-900">{{ $template->name }}</div>
                                         <div class="text-xs text-gray-500">{{ $template->timesLabel() }} · {{ $template->recurrenceLabel() }}</div>
@@ -219,11 +238,16 @@
                                                class="w-16 rounded-md border-gray-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500" aria-label="Aantal personen {{ $template->name }}">
                                     </td>
                                     @foreach ($staffEmployees as $employee)
-                                        <td class="px-2 py-2 text-center align-top" @unless (in_array($employee->id, $knownIds)) x-show="showAll" @endunless>
-                                            <input type="checkbox" name="fixed[{{ $template->id }}][]" value="{{ $employee->id }}" class="checkbox h-5 w-5"
-                                                   aria-label="{{ $employee->name }} op {{ $template->name }}"
-                                                   @checked(in_array($employee->id, $fixedIds))
-                                                   @change="checked += $event.target.checked ? 1 : -1">
+                                        <td class="px-2 py-2 text-center align-top" @unless (in_array($employee->id, $knownIds)) x-show="showAll" @endunless
+                                            :title="title({{ $template->id }}, {{ $employee->id }})">
+                                            <span class="inline-flex flex-col items-center gap-1">
+                                                <input type="checkbox" name="fixed[{{ $template->id }}][]" value="{{ $employee->id }}" class="checkbox h-5 w-5"
+                                                       aria-label="{{ $employee->name }} op {{ $template->name }}"
+                                                       data-template="{{ $template->id }}" data-task="{{ $template->name }}"
+                                                       @checked(in_array($employee->id, $fixedIds))
+                                                       @change="checked += $event.target.checked ? 1 : -1">
+                                                <span class="h-2 w-2 rounded-full" :class="dot({{ $template->id }}, {{ $employee->id }})"></span>
+                                            </span>
                                         </td>
                                     @endforeach
                                 </tr>

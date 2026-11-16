@@ -13,6 +13,8 @@
         --topbar-h: 3.5rem;
     }
     html { -webkit-text-size-adjust: 100%; }
+    /* Ankers (#bezetting) niet onder de vaste bovenbalk laten vallen. */
+    [id] { scroll-margin-top: 4.5rem; }
     body { font-feature-settings: 'cv11', 'ss01', 'tnum' 0; }
     ::selection { background: rgb(13 148 136 / 0.2); }
     /* Zichtbare, rustige focusring voor toetsenbordgebruik. */
@@ -61,18 +63,9 @@
 
     /* Avatar: initialen op de kleur van de medewerker */
     .avatar { @apply inline-flex h-8 w-8 shrink-0 select-none items-center justify-center rounded-full text-[0.7rem] font-semibold uppercase leading-none; background: var(--c, #64748b); color: var(--ink, #fff); }
-    .avatar-xs { @apply h-5 w-5 text-[0.55rem]; }
-    .avatar-sm { @apply h-6 w-6 text-[0.6rem]; }
-    .avatar-lg { @apply h-11 w-11 text-sm; }
-    .avatar-xl { @apply h-14 w-14 text-base; }
 
     /* Statuspunt: waar is iemand nu */
     .dot { @apply inline-block h-2 w-2 shrink-0 rounded-full bg-gray-300; }
-    .dot-working { @apply bg-emerald-500; box-shadow: 0 0 0 3px rgb(16 185 129 / 0.2); }
-    .dot-later { @apply bg-sky-500; }
-    .dot-absent { @apply bg-red-500; }
-    .dot-done { @apply bg-gray-400; }
-    .dot-free { @apply bg-gray-300; }
 
     /* Labels */
     .badge { @apply inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium; }
@@ -179,6 +172,18 @@
     .palette-item { @apply flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-left; }
     .palette-item.is-active { @apply bg-teal-50; }
 }
+
+/* Varianten die in code worden samengesteld ('avatar-' + maat, 'dot-' + status). Bewust buiten
+   @layer: daar zou Tailwind ze weggooien omdat de volledige naam nergens letterlijk staat. */
+.avatar-xs { width: 1.25rem; height: 1.25rem; font-size: 0.55rem; }
+.avatar-sm { width: 1.5rem; height: 1.5rem; font-size: 0.6rem; }
+.avatar-lg { width: 2.75rem; height: 2.75rem; font-size: 0.875rem; }
+.avatar-xl { width: 3.5rem; height: 3.5rem; font-size: 1rem; }
+.dot-working { background: #10b981; box-shadow: 0 0 0 3px rgb(16 185 129 / 0.2); }
+.dot-later { background: #0ea5e9; }
+.dot-absent { background: #ef4444; }
+.dot-done { background: #94a3b8; }
+.dot-free { background: #cbd5e1; }
 
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes pop-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } }

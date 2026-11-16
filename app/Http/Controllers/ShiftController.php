@@ -25,7 +25,10 @@ class ShiftController extends Controller
             'skills' => Skill::orderBy('name')->get(),
             'employees' => Employee::active()->orderBy('name')->get(),
             'selectedBuilding' => $request->integer('pand') ?: null,
-            'date' => $request->query('datum', today()->toDateString()),
+            // Vanuit het rooster: datum en medewerker al ingevuld, en na opslaan terug naar het rooster.
+            'selectedEmployee' => $request->integer('medewerker') ?: null,
+            'date' => rescue(fn () => CarbonImmutable::parse((string) $request->query('datum', 'today'))->toDateString(), today()->toDateString(), false),
+            'back' => $request->query('terug') === 'planning' ? 'planning' : null,
         ]);
     }
 
@@ -43,6 +46,7 @@ class ShiftController extends Controller
             'skills.*' => ['exists:skills,id'],
             'employees' => ['array'],
             'employees.*' => ['exists:employees,id'],
+            'back' => ['nullable', 'in:planning'],
         ]);
 
         [$startsAt, $endsAt] = ShiftGenerator::timesFor(CarbonImmutable::parse($data['date']), $data['start_time'], $data['end_time']);
@@ -64,7 +68,10 @@ class ShiftController extends Controller
             }
         });
 
-        return redirect()->route('dashboard', ['datum' => $startsAt->toDateString()])
-            ->with('status', 'Opdracht ingepland.');
+        $target = ($data['back'] ?? null) === 'planning'
+            ? route('planning', ['view' => 'employee', 'range' => 'week', 'date' => $startsAt->toDateString()])
+            : route('dashboard', ['datum' => $startsAt->toDateString()]);
+
+        return redirect($target)->with('status', 'Opdracht ingepland.');
     }
 }

@@ -7,10 +7,29 @@
         <h1 class="page-title">Verlof, ziekte &amp; uitval</h1>
         <div class="flex flex-wrap gap-2">
             <a href="{{ route('absences.export', ['jaar' => now()->year]) }}" class="btn-secondary" title="Uren en dagen per medewerker per soort, voor de loonadministratie">Export {{ now()->year }} (CSV)</a>
-            <a href="{{ route('absences.index', ['status' => 'pending']) }}" class="btn-secondary">Openstaande verzoeken</a>
-            <a href="{{ route('absences.create') }}" class="btn">+ Afwezigheid / uitval</a>
+            <a href="{{ route('absences.create') }}" class="btn"><x-icon name="plus" />Afwezigheid of uitval</a>
         </div>
     </x-slot>
+
+    {{-- Snelle ingangen; het filter eronder verfijnt verder. --}}
+    @php
+        $tab = match (true) {
+            $status === 'pending' => 'verzoeken',
+            $status === 'ingetrokken' => 'ingetrokken',
+            $period === 'verleden' => 'verleden',
+            $period === 'alles' => 'alles',
+            default => 'huidig',
+        };
+        $pendingCount = \App\Models\Absence::query()->where('status', 'pending')->count();
+    @endphp
+    <nav class="tabs mb-4" aria-label="Afwezigheid">
+        <a href="{{ route('absences.index') }}" class="{{ $tab === 'huidig' ? 'is-active' : '' }}">Nu en gepland</a>
+        <a href="{{ route('absences.index', ['status' => 'pending']) }}" class="{{ $tab === 'verzoeken' ? 'is-active' : '' }}">Verzoeken
+            @if ($pendingCount)<span class="badge badge-amber">{{ $pendingCount }}</span>@endif</a>
+        <a href="{{ route('absences.index', ['periode' => 'verleden']) }}" class="{{ $tab === 'verleden' ? 'is-active' : '' }}">Geschiedenis</a>
+        <a href="{{ route('absences.index', ['periode' => 'alles']) }}" class="{{ $tab === 'alles' ? 'is-active' : '' }}">Alles</a>
+        <a href="{{ route('absences.index', ['status' => 'ingetrokken', 'periode' => 'alles']) }}" class="{{ $tab === 'ingetrokken' ? 'is-active' : '' }}">Ingetrokken</a>
+    </nav>
 
     {{-- Filter: zo is ook oude afwezigheid per medewerker en per soort terug te vinden. --}}
     <form method="GET" action="{{ route('absences.index') }}" class="card card-body mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -67,7 +86,7 @@
             <tbody class="divide-y divide-gray-100">
                 @forelse ($absences as $absence)
                     <tr class="{{ ! $withdrawn && $absence->starts_at->isPast() && $absence->ends_at->isFuture() ? 'bg-amber-50/50' : '' }} {{ $withdrawn ? 'text-gray-500' : '' }}">
-                        <td class="font-medium"><a href="{{ route('employees.edit', $absence->employee) }}" class="hover:text-teal-700">{{ $absence->employee->name }}</a></td>
+                        <td class="whitespace-nowrap font-medium"><a href="{{ route('employees.show', $absence->employee) }}" data-open-employee="{{ $absence->employee_id }}" class="inline-flex items-center gap-2 hover:text-teal-700"><x-avatar :name="$absence->employee->name" :color="$absence->employee->color" size="sm" />{{ $absence->employee->name }}</a></td>
                         <td class="whitespace-nowrap">
                             <span class="chip {{ $absence->chipClass() }}">{{ $absence->typeLabel() }}</span>
                             @if ($withdrawn)

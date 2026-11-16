@@ -25,7 +25,16 @@ class BuildingController extends Controller
             ->orderByDesc('active')->orderBy('name')
             ->get();
 
-        return view('buildings.index', compact('buildings'));
+        // Per pand: de diensten van vandaag en wie er nu is.
+        $now = CarbonImmutable::now();
+        $today = Shift::query()->active()
+            ->overlapping($now->startOfDay(), $now->startOfDay()->addDay())
+            ->with('assignments.employee:id,name,color')
+            ->orderBy('starts_at')
+            ->get()
+            ->groupBy('building_id');
+
+        return view('buildings.index', compact('buildings', 'today', 'now'));
     }
 
     public function create(): View
