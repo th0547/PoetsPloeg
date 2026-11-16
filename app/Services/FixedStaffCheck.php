@@ -123,6 +123,40 @@ class FixedStaffCheck
         return $template;
     }
 
+    /**
+     * Vaste krachten van de taak die niet op deze dienst staan, met de reden: zo is te zien waarom
+     * een dienst open staat (afwezig, kan niet op dit tijdvak, al ergens anders ingepland).
+     *
+     * @return list<array{employee_id: int, name: string, reason: string}>
+     */
+    public function missingOn(Shift $shift): array
+    {
+        $shift->loadMissing(['template.employees:id,name,color,active', 'assignments']);
+        if (! $shift->template || $shift->openSlots() === 0) {
+            return [];
+        }
+        $missing = $shift->template->employees
+            ->where('active', true)
+            ->whereNotIn('id', $shift->assignments->pluck('employee_id'))
+            ->take(max(1, $shift->required_staff));
+        if ($missing->isEmpty()) {
+            return [];
+        }
+
+        $checks = $this->checker->forCandidates($shift, $missing->pluck('id')->values());
+
+        return $missing->map(function (Employee $employee) use ($checks) {
+            $blocking = collect($checks[$employee->id]['warnings'] ?? [])
+                ->first(fn ($w) => in_array($w['type'], ['absent', 'overlap', 'availability'], true));
+
+            return [
+                'employee_id' => $employee->id,
+                'name' => $employee->name,
+                'reason' => $blocking['message'] ?? 'niet ingepland op deze dienst',
+            ];
+        })->values()->all();
+    }
+
     /** Moet de planner dit bevestigen voor het opslaan? */
     public static function needsConfirmation(array $results): bool
     {

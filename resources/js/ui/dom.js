@@ -17,7 +17,10 @@ export function contrast(color) {
 
 /** "Jan de Vries" → "JV", "Bram" → "BR" (gelijk aan Planning::initials in PHP). */
 export function initials(name) {
-    const words = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+    const all = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+    // Titels ("dr.", "ing.") tellen niet mee, tenzij er verder niets staat.
+    const named = all.filter((w) => !w.endsWith('.'));
+    const words = named.length ? named : all;
     if (!words.length) return '?';
     if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
     return (words[0][0] + words[words.length - 1][0]).toUpperCase();

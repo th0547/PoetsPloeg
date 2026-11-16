@@ -110,9 +110,10 @@ class ReplacementFinder
             ? ['ok' => true, 'text' => 'Heeft vereiste vaardigheden']
             : ['ok' => false, 'text' => 'Mist: '.implode(', ', $checks['missing_skills'])];
 
+        // 'soft': een minpunt, maar geen reden om iemand niet in te plannen.
         $reasons[] = $checks['knows_building']
             ? ['ok' => true, 'text' => 'Kent dit pand']
-            : ['ok' => false, 'text' => 'Kent pand niet'];
+            : ['ok' => false, 'soft' => true, 'text' => 'Kent pand niet'];
 
         $max = $checks['contract_max'];
         $hours = $this->num($checks['week_hours']).' → '.$this->num($checks['new_week_hours']).' u'

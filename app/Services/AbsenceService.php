@@ -49,6 +49,8 @@ class AbsenceService
                 $shift->assignments()->where('employee_id', $absence->employee_id)->delete();
                 $shift->update(['is_modified' => true]);
             }
+            // Onthoud welke diensten zijn vrijgemaakt: het vervangscherm toont precies die diensten.
+            $absence->shifts()->syncWithoutDetaching($shifts->pluck('id'));
         });
 
         return $shifts;

@@ -43,6 +43,29 @@ export default function replaceCard(shiftId, replaceId = null, limit = 3) {
             return FIT[candidate.fit] ?? FIT.good;
         },
 
+        /** Wat tegen deze kandidaat spreekt (buiten beschikbaarheid, kent pand niet, boven contract). */
+        concerns(candidate) {
+            return candidate.reasons.filter((r) => r.ok === false && !r.soft).map((r) => r.text);
+        },
+
+        /** Minpunten die inplannen niet in de weg staan (kent het pand nog niet). */
+        notes(candidate) {
+            return candidate.reasons.filter((r) => r.ok === false && r.soft).map((r) => r.text.toLowerCase());
+        },
+
+        /** Wat voor deze kandidaat spreekt, kort. */
+        strengths(candidate) {
+            return candidate.reasons.filter((r) => r.ok === true && !r.text.startsWith('Week:')).map((r) => r.text);
+        },
+
+        weekLine(candidate) {
+            return candidate.reasons.find((r) => r.text.startsWith('Week:'))?.text ?? '';
+        },
+
+        dayLine(candidate) {
+            return candidate.day_shifts.map((d) => `${d.start}–${d.end} ${d.building}`).join(' · ');
+        },
+
         async load() {
             this.loading = true;
             this.error = null;

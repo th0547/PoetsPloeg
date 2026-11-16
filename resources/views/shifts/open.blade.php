@@ -12,12 +12,12 @@
             </p>
         </div>
         <form method="GET" class="flex flex-wrap items-center gap-2">
-            <select name="weken" data-auto-submit class="rounded-md border-gray-300 text-sm shadow-sm" aria-label="Periode">
+            <select name="weken" data-auto-submit class="input mt-0 !w-auto" aria-label="Periode">
                 @foreach (\App\Http\Controllers\OpenShiftController::PERIODS as $value => $label)
                     <option value="{{ $value }}" @selected($weeks === $value)>Komende {{ $label }}</option>
                 @endforeach
             </select>
-            <select name="pand" data-auto-submit class="rounded-md border-gray-300 text-sm shadow-sm" aria-label="Pand">
+            <select name="pand" data-auto-submit class="input mt-0 !w-auto" aria-label="Pand">
                 <option value="">Alle panden</option>
                 @foreach ($buildings as $building)
                     <option value="{{ $building->id }}" @selected($buildingId === $building->id)>{{ $building->name }}</option>
@@ -26,41 +26,33 @@
         </form>
     </x-slot>
 
-    <div x-data @shift-panel-closed.window="if ($event.detail.changed) window.location.reload()" class="space-y-4">
+    <div x-data @shift-panel-closed.window="if ($event.detail.changed) window.location.reload()" class="max-w-5xl space-y-5">
+        @if ($shiftCount)
+            <p class="text-sm text-gray-600">Bij elke dienst staan de beste kandidaten al klaar: één klik op <strong>Inplannen</strong> en de plek is gevuld.</p>
+        @endif
         @forelse ($days as $date => $shifts)
             @php($day = \Carbon\CarbonImmutable::parse($date))
             <section class="card overflow-hidden">
-                <div class="flex items-center justify-between border-b bg-gray-50 px-4 py-2">
-                    <h2 class="font-semibold text-gray-800">
+                <div class="card-head bg-gray-50">
+                    <h2 class="card-title">
                         {{ ucfirst($day->translatedFormat('l j F')) }}
-                        @if ($day->isToday())<span class="chip ms-1 bg-teal-100 text-teal-800">vandaag</span>
-                        @elseif ($day->isTomorrow())<span class="chip ms-1">morgen</span>@endif
+                        @if ($day->isToday())<span class="badge badge-teal ms-1">vandaag</span>
+                        @elseif ($day->isTomorrow())<span class="badge badge-gray ms-1">morgen</span>@endif
                     </h2>
-                    <span class="text-xs text-orange-700">{{ $shifts->sum(fn ($s) => $s->openSlots()) }} open</span>
+                    <span class="badge badge-orange">{{ $shifts->sum(fn ($s) => $s->openSlots()) }} open</span>
                 </div>
-                <ul class="divide-y">
+                <ul class="divide-y divide-gray-200">
                     @foreach ($shifts as $shift)
-                        <li class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5" style="border-left: 4px solid {{ $shift->building->color }}">
-                            <div class="min-w-0">
-                                <p class="text-sm">
-                                    <span class="font-mono text-gray-600">{{ $shift->starts_at->format('H:i') }}–{{ $shift->ends_at->format('H:i') }}</span>
-                                    <span class="ms-2 font-medium text-gray-900">{{ $shift->building->name }}</span>
-                                    <span class="text-gray-600">· {{ $shift->title }}</span>
-                                </p>
-                                <div class="mt-1 flex flex-wrap items-center gap-1">
-                                    @foreach ($shift->assignments as $a)
-                                        <span class="chip"><span class="me-1 h-2 w-2 rounded-full" style="background: {{ $a->employee->color }}"></span>{{ $a->employee->name }}</span>
-                                    @endforeach
-                                    <span class="chip bg-orange-100 text-orange-800">{{ $shift->openSlots() }} van {{ $shift->required_staff }} open</span>
-                                </div>
-                            </div>
-                            <button type="button" class="btn btn-sm shrink-0" data-open-shift="{{ $shift->id }}" data-candidates>Zoek vervanger</button>
-                        </li>
+                        @include('partials.replace-card', ['shift' => $shift, 'replace' => null, 'showDate' => false, 'missing' => $missing[$shift->id] ?? []])
                     @endforeach
                 </ul>
             </section>
         @empty
-            <div class="card card-body text-center text-sm text-teal-700">Alles is bezet in deze periode. 👍</div>
+            <div class="card empty !py-12">
+                <x-icon name="check-circle" class="icon-lg text-teal-600" />
+                <p class="font-medium text-gray-800">Alles is bezet in deze periode.</p>
+                <p>Er staan geen open plekken{{ $buildingId ? ' voor dit pand' : '' }}.</p>
+            </div>
         @endforelse
     </div>
 </x-app-layout>

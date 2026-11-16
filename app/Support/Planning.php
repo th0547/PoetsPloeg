@@ -36,7 +36,9 @@ class Planning
     /** Initialen voor een avatar: "Jan de Vries" → "JV", "Bram" → "BR". */
     public static function initials(?string $name): string
     {
-        $words = array_values(array_filter(preg_split('/\s+/', trim((string) $name)) ?: []));
+        $all = array_values(array_filter(preg_split('/\s+/', trim((string) $name)) ?: []));
+        // Titels ("dr.", "ing.") tellen niet mee, tenzij er verder niets staat.
+        $words = array_values(array_filter($all, fn ($w) => ! str_ends_with($w, '.'))) ?: $all;
         if ($words === []) {
             return '?';
         }

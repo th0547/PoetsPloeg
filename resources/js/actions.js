@@ -49,17 +49,20 @@ export default function registerActions(root = document) {
             return;
         }
 
-        const shift = event.target.closest('[data-open-shift]');
-        if (shift) {
-            const { openShift: id, replace } = shift.dataset;
-            openShift(Number(id), 'candidates' in shift.dataset, replace ? Number(replace) : null);
+        // Het dichtstbijzijnde element telt: een naam binnen een dienstregel opent de medewerker, niet de dienst.
+        const target = event.target.closest('[data-open-employee], [data-open-shift]');
+        if (target?.dataset.openEmployee !== undefined) {
+            if (event.metaKey || event.ctrlKey) return;
+            event.preventDefault();
+            openEmployee(Number(target.dataset.openEmployee), target.dataset.date || null);
             return;
         }
-
-        const employee = event.target.closest('[data-open-employee]');
-        if (employee && !event.metaKey && !event.ctrlKey) {
-            event.preventDefault();
-            openEmployee(Number(employee.dataset.openEmployee), employee.dataset.date || null);
+        if (target) {
+            // Links en knoppen binnen een dienstregel (bijv. naar het pand) doen gewoon hun eigen werk.
+            const inner = event.target.closest('a, button');
+            if (inner && inner !== target && target.contains(inner)) return;
+            const { openShift: id, replace } = target.dataset;
+            openShift(Number(id), 'candidates' in target.dataset, replace ? Number(replace) : null);
             return;
         }
 

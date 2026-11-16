@@ -10,6 +10,7 @@ use App\Models\Skill;
 use App\Services\AbsenceService;
 use App\Services\Audit;
 use App\Services\ConflictChecker;
+use App\Services\FixedStaffCheck;
 use App\Services\ReplacementFinder;
 use App\Services\ShiftGenerator;
 use App\Support\Planning;
@@ -154,7 +155,7 @@ class ShiftApiController extends Controller
             'is_modified' => $shift->is_modified,
             'cancelled' => $shift->cancelled_at !== null,
             'state' => $shift->ends_at->lte($now) ? 'done' : ($shift->starts_at->lte($now) ? 'now' : 'later'),
-            'fixed_missing' => $this->fixedMissing($shift),
+            'fixed_missing' => app(FixedStaffCheck::class)->missingOn($shift),
             'template' => $shift->template ? [
                 'id' => $shift->template->id,
                 // Het patroon van deze dienst; bij oudere diensten (zonder patroon) alle patronen van de taak.
@@ -183,38 +184,5 @@ class ShiftApiController extends Controller
                 'warnings' => $warnings[$a->employee_id] ?? [],
             ])->values(),
         ];
-    }
-
-    /**
-     * Vaste krachten van de taak die niet op deze dienst staan, met de reden: zo is te zien waarom
-     * een dienst open staat (afwezig, kan niet op dit tijdvak, al ergens anders ingepland).
-     *
-     * @return list<array{employee_id: int, name: string, reason: string}>
-     */
-    private function fixedMissing(Shift $shift): array
-    {
-        if (! $shift->template || $shift->openSlots() === 0) {
-            return [];
-        }
-        $missing = $shift->template->employees
-            ->where('active', true)
-            ->whereNotIn('id', $shift->assignments->pluck('employee_id'))
-            ->take(max(1, $shift->required_staff));
-        if ($missing->isEmpty()) {
-            return [];
-        }
-
-        $checks = $this->checker->forCandidates($shift, $missing->pluck('id')->values());
-
-        return $missing->map(function (Employee $employee) use ($checks) {
-            $blocking = collect($checks[$employee->id]['warnings'] ?? [])
-                ->first(fn ($w) => in_array($w['type'], ['absent', 'overlap', 'availability'], true));
-
-            return [
-                'employee_id' => $employee->id,
-                'name' => $employee->name,
-                'reason' => $blocking['message'] ?? 'niet ingepland op deze dienst',
-            ];
-        })->values()->all();
     }
 }

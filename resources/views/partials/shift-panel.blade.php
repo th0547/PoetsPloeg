@@ -105,7 +105,7 @@
                             </div>
                             <div class="mt-2 flex flex-wrap gap-1 ps-[2.6rem]">
                                 <template x-for="r in c.reasons" :key="r.text">
-                                    <span class="badge" :class="r.ok === true ? 'badge-green' : (r.ok === false ? 'badge-red' : 'badge-gray')" x-text="(r.ok === true ? '✓ ' : (r.ok === false ? '✗ ' : '')) + r.text"></span>
+                                    <span class="badge" :class="r.ok === true ? 'badge-green' : (r.ok === false && !r.soft ? 'badge-red' : 'badge-gray')" x-text="(r.ok === true ? '✓ ' : (r.ok === false && !r.soft ? '✗ ' : '')) + r.text"></span>
                                 </template>
                             </div>
                             <p class="mt-1.5 ps-[2.6rem] text-xs text-gray-500" x-show="c.day_shifts.length">
