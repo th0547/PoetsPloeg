@@ -606,9 +606,18 @@ button.rh:hover, a.rh:hover { background: #f1f5f9; }
     .board-page { --head-w: 7.75rem; --col-min: 8.75rem; }
     .tl { --head-w: 7.75rem; }
     .bg-month { --head-w: 6.5rem; --col-min: 2.7rem; }
-    .board-toolbar { padding: 0.625rem 0.75rem 0.5rem; }
+    /* Werkbalk in drie regels: ‹ titel Vandaag › · periode en weergave · zoeken en filters. */
+    .board-toolbar { padding: 0.5rem 0.75rem; gap: 0.5rem; }
+    .tb-prev { order: 1; }
+    .tb-title { order: 2; flex: 1; min-width: 0; text-align: center; }
+    .tb-today { order: 3; padding-left: 0.6rem; padding-right: 0.6rem; }
+    .tb-next { order: 4; }
+    .tb-loading { display: none; }
+    .tb-tools { order: 5; width: 100%; margin-left: 0; }
+    .board-title { margin: 0; padding: 0.15rem 0.25rem; font-size: 0.9rem; line-height: 1.2; white-space: normal; }
+    .board-toolbar .segmented > button { padding-left: 0.7rem; padding-right: 0.7rem; }
     .board-summary { padding: 0 0.75rem 0.5rem; flex-wrap: nowrap; overflow-x: auto; }
-    .board-search { max-width: none; flex-basis: 100%; }
+    .board-search { max-width: none; flex: 1 1 8rem; }
     .bg-rowhead { padding: 0 0.25rem 0 0.5rem; }
     .bg-rowhead .avatar, .rh-icon { display: none; }
     .rh-sub .meter { display: none; }
@@ -619,7 +628,7 @@ button.rh:hover, a.rh:hover { background: #f1f5f9; }
 
 /* ---------- Afdrukken ---------- */
 @media print {
-    .board-toolbar .no-print, .board-summary button, .bg-add, .hover-card { display: none !important; }
+    .board-toolbar .no-print, .board-summary button, .bg-add, .hover-card, .un { display: none !important; }
     .board-scroll { height: auto !important; overflow: visible !important; }
     .bg-corner, .bg-dayhead, .bg-rowhead, .tl-axis, .cal-dow { position: static !important; }
     .sc, .sm, .cal-ev { break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }

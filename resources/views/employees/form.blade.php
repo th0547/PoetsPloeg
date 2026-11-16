@@ -1,16 +1,39 @@
 @php($days = config('poetsploeg.weekdays'))
 <x-app-layout :title="$employee->exists ? $employee->name : 'Nieuwe medewerker'">
     <x-slot name="header">
-        <h1 class="page-title">{{ $employee->exists ? $employee->name : 'Nieuwe medewerker' }}</h1>
-        <a href="{{ route('employees.index') }}" class="btn-secondary">‹ Alle medewerkers</a>
+        <div class="flex min-w-0 items-center gap-3">
+            @if ($employee->exists)<x-avatar :name="$employee->name" :color="$employee->color" size="lg" />@endif
+            <div class="min-w-0">
+                <h1 class="page-title truncate">{{ $employee->exists ? $employee->name : 'Nieuwe medewerker' }}</h1>
+                @if ($employee->exists)<p class="text-sm text-gray-500">Gegevens, beschikbaarheid en verlof bewerken</p>@endif
+            </div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ route('employees.index') }}" class="btn-ghost"><x-icon name="chevron-left" />Alle medewerkers</a>
+            @if ($employee->exists)
+                <a href="{{ route('employees.show', $employee) }}" class="btn-secondary"><x-icon name="user" />Profiel en week</a>
+            @endif
+        </div>
     </x-slot>
+
+    {{-- Het formulier is lang: spring direct naar het onderdeel dat je zoekt. --}}
+    <nav class="tabs sticky top-14 z-10 -mx-4 mb-5 bg-gray-50/95 px-4 backdrop-blur sm:-mx-6 sm:px-6" aria-label="Onderdelen">
+        <a href="#gegevens">Gegevens</a>
+        <a href="#inloggen">Inloggen</a>
+        <a href="#vaardigheden">Vaardigheden</a>
+        <a href="#pandkennis">Pandkennis</a>
+        <a href="#beschikbaarheid">Beschikbaarheid</a>
+        @if ($employee->exists)
+            <a href="#verlof">Verlof en afwezigheid</a>
+        @endif
+    </nav>
 
     <div class="grid gap-6 lg:grid-cols-3">
         <form method="POST" action="{{ $employee->exists ? route('employees.update', $employee) : route('employees.store') }}" class="lg:col-span-2 space-y-6">
             @csrf
             @if ($employee->exists) @method('PUT') @endif
 
-            <div class="card card-body space-y-4">
+            <div class="card card-body space-y-4" id="gegevens">
                 <h2 class="font-semibold text-gray-800">Gegevens</h2>
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div class="sm:col-span-2">
@@ -51,7 +74,7 @@
             </div>
 
             {{-- Eigen inlog: de medewerker ziet de eigen planning, vraagt verlof aan en geeft beschikbaarheid door. --}}
-            <div class="card card-body space-y-3">
+            <div class="card card-body space-y-3" id="inloggen">
                 <div>
                     <h2 class="font-semibold text-gray-800">Inloggen</h2>
                     <p class="text-xs text-gray-500">Met een eigen inlog ziet de medewerker de eigen planning, vraagt verlof aan en geeft beschikbaarheid door. Het e-mailadres hierboven is de inlognaam.</p>
@@ -93,7 +116,7 @@
                 @endif
             </div>
 
-            <div class="card card-body space-y-3">
+            <div class="card card-body space-y-3" id="vaardigheden">
                 <div>
                     <h2 class="font-semibold text-gray-800">Vaardigheden</h2>
                     <p class="text-xs text-gray-500">Welke taken kan deze medewerker uitvoeren? <a href="{{ route('skills.index') }}" class="text-teal-700 hover:underline">Vaardigheden beheren</a></p>
@@ -110,7 +133,7 @@
                 </div>
             </div>
 
-            <div class="card card-body space-y-3">
+            <div class="card card-body space-y-3" id="pandkennis">
                 <div>
                     <h2 class="font-semibold text-gray-800">Pandkennis</h2>
                     <p class="text-xs text-gray-500">Op welke panden is deze medewerker ingewerkt (sleutel/alarm, werkwijze)? Deze medewerkers krijgen voorrang als vervanger.</p>
@@ -127,19 +150,23 @@
                 </div>
             </div>
 
-            @include('employees.partials.availability', [
-                'self' => false,
-                'absenceUrl' => $employee->exists ? route('absences.create', ['medewerker' => $employee->id]) : null,
-            ])
+            <div id="beschikbaarheid">
+                @include('employees.partials.availability', [
+                    'self' => false,
+                    'absenceUrl' => $employee->exists ? route('absences.create', ['medewerker' => $employee->id]) : null,
+                ])
+            </div>
 
-            <div class="flex items-center justify-between">
+            {{-- Opslaan blijft in beeld, waar je ook bent in het formulier. --}}
+            <div class="sticky bottom-3 z-10 flex items-center gap-3 rounded-xl border border-gray-200 bg-white/95 px-4 py-3 shadow-pop backdrop-blur">
                 <button type="submit" class="btn">Opslaan</button>
+                <span class="text-xs text-gray-500">Slaat gegevens, vaardigheden, pandkennis en beschikbaarheid in één keer op.</span>
             </div>
         </form>
 
         <aside class="space-y-6">
             @if ($employee->exists)
-                <div class="card card-body space-y-3">
+                <div class="card card-body space-y-3" id="verlof">
                     <div class="flex items-center justify-between">
                         <h2 class="font-semibold text-gray-800">Verlof &amp; afwezigheid</h2>
                         <a href="{{ route('absences.create', ['medewerker' => $employee->id]) }}" class="text-sm text-teal-700 hover:underline">+ Toevoegen</a>
@@ -196,7 +223,7 @@
 
                 <div class="card card-body space-y-2">
                     <h2 class="font-semibold text-gray-800">Planning</h2>
-                    <a href="{{ route('planning', ['view' => 'employee', 'range' => 'week']) }}" class="text-sm text-teal-700 hover:underline">Bekijk in de weekplanning</a>
+                    <a href="{{ route('planning', ['view' => 'employee', 'range' => 'week', 'q' => $employee->name]) }}" class="link text-sm">Bekijk in de weekplanning</a>
                 </div>
 
                 @if ($employee->user?->hasTwoFactor())

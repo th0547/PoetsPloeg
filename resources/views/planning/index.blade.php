@@ -5,28 +5,26 @@
 
     <div x-data="planningBoard()" class="board-page">
         <div class="board-toolbar">
-            {{-- Periode --}}
-            <div class="flex items-center gap-1">
-                <button type="button" class="btn-icon border border-gray-300 bg-white" @click="step(-1)" aria-label="Vorige periode" title="Vorige (←)"><x-icon name="chevron-left" /></button>
-                <button type="button" class="btn-secondary !py-1.5" @click="goToday()" title="Naar vandaag (T)">Vandaag</button>
-                <button type="button" class="btn-icon border border-gray-300 bg-white" @click="step(1)" aria-label="Volgende periode" title="Volgende (→)"><x-icon name="chevron-right" /></button>
-            </div>
-            <div class="relative">
+            {{-- Periode. Op een telefoon: ‹ titel Vandaag › op één regel. --}}
+            <button type="button" class="tb-prev btn-icon border border-gray-300 bg-white no-print" @click="step(-1)" aria-label="Vorige periode" title="Vorige (←)"><x-icon name="chevron-left" /></button>
+            <button type="button" class="tb-today btn-secondary !py-1.5 no-print" @click="goToday()" title="Naar vandaag (T)">Vandaag</button>
+            <button type="button" class="tb-next btn-icon border border-gray-300 bg-white no-print" @click="step(1)" aria-label="Volgende periode" title="Volgende (→)"><x-icon name="chevron-right" /></button>
+            <div class="tb-title relative">
                 <button type="button" class="board-title" @click="pickDate()" title="Kies een datum" x-text="label">Planning</button>
                 <input type="date" x-ref="picker" x-model="date" @change="load()" class="pointer-events-none absolute bottom-0 left-0 h-0 w-0 opacity-0" tabindex="-1" aria-label="Datum">
             </div>
-            <span x-show="loading" x-cloak class="text-sm text-gray-400">laden…</span>
+            <span x-show="loading" x-cloak class="tb-loading text-sm text-gray-400">laden…</span>
 
-            <div class="ms-auto flex flex-wrap items-center gap-2">
+            <div class="tb-tools ms-auto flex flex-wrap items-center gap-2">
                 <div class="segmented no-print" role="group" aria-label="Periode">
                     <button type="button" @click="setRange('day')" :class="range === 'day' && view !== 'calendar' ? 'is-active' : ''" title="Dag (D)">Dag</button>
                     <button type="button" @click="setRange('week')" :class="range === 'week' && view !== 'calendar' ? 'is-active' : ''" title="Week (W)">Week</button>
                     <button type="button" @click="setRange('month')" :class="range === 'month' && view !== 'calendar' ? 'is-active' : ''" title="Maand (M)">Maand</button>
                 </div>
                 <div class="segmented no-print" role="group" aria-label="Weergave">
-                    <button type="button" @click="setView('employee')" :class="view === 'employee' ? 'is-active' : ''"><span class="hidden sm:inline">Per </span>medewerker</button>
-                    <button type="button" @click="setView('building')" :class="view === 'building' ? 'is-active' : ''"><span class="hidden sm:inline">Per </span>pand</button>
-                    <button type="button" @click="setView('calendar')" :class="view === 'calendar' ? 'is-active' : ''">Kalender</button>
+                    <button type="button" @click="setView('employee')" :class="view === 'employee' ? 'is-active' : ''" title="Per medewerker"><x-icon name="users" class="sm:hidden" /><span class="sr-only sm:not-sr-only">Per medewerker</span></button>
+                    <button type="button" @click="setView('building')" :class="view === 'building' ? 'is-active' : ''" title="Per pand"><x-icon name="building" class="sm:hidden" /><span class="sr-only sm:not-sr-only">Per pand</span></button>
+                    <button type="button" @click="setView('calendar')" :class="view === 'calendar' ? 'is-active' : ''" title="Maandkalender"><x-icon name="calendar" class="sm:hidden" /><span class="sr-only sm:not-sr-only">Kalender</span></button>
                 </div>
 
                 <div class="board-search no-print">

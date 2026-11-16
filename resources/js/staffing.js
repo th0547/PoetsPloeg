@@ -84,6 +84,12 @@ export default function staffPicker(config) {
             return !r || r.status === 'ok';
         },
 
+        /** Volgorde in de lijst: gekozen eerst, dan wie alles kan, dan deels, dan wie niet kan. */
+        rank(id) {
+            if (this.selected.includes(id)) return 0;
+            return { ok: 1, warning: 2, blocked: 3 }[this.result(id)?.status] ?? 1;
+        },
+
         cls(id) {
             return STATUS[this.result(id)?.status]?.cls ?? 'text-gray-400';
         },

@@ -334,7 +334,7 @@
             <div class="grid gap-2 sm:grid-cols-2">
                 @foreach ($sortedEmployees as $employee)
                     <label class="flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2 hover:border-gray-300"
-                           x-show="visible({{ $employee->id }})"
+                           x-show="visible({{ $employee->id }})" :style="{ order: rank({{ $employee->id }}) }"
                            :class="selected.includes({{ $employee->id }}) ? (result({{ $employee->id }})?.status && result({{ $employee->id }}).status !== 'ok' ? 'border-amber-300 bg-amber-50/60' : 'border-teal-300 bg-teal-50/50') : 'border-gray-200'">
                         <input type="checkbox" name="employees[]" value="{{ $employee->id }}" class="checkbox mt-0.5" x-model.number="selected" @checked(in_array($employee->id, $selectedEmployees))>
                         <span class="min-w-0 flex-1">

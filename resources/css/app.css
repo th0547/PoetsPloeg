@@ -14,7 +14,7 @@
     }
     html { -webkit-text-size-adjust: 100%; }
     /* Ankers (#bezetting) niet onder de vaste bovenbalk laten vallen. */
-    [id] { scroll-margin-top: 4.5rem; }
+    [id] { scroll-margin-top: 7rem; }
     body { font-feature-settings: 'cv11', 'ss01', 'tnum' 0; }
     ::selection { background: rgb(13 148 136 / 0.2); }
     /* Zichtbare, rustige focusring voor toetsenbordgebruik. */
