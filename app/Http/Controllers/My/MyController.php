@@ -60,8 +60,17 @@ class MyController extends Controller
             ]);
         }
 
+        // De eerstvolgende dienst, los van de weken die in beeld zijn.
+        $next = Shift::query()->active()
+            ->where('ends_at', '>', now())
+            ->whereHas('assignments', fn ($q) => $q->where('employee_id', $employee->id))
+            ->with(['building', 'employees:id,name'])
+            ->orderBy('starts_at')
+            ->first();
+
         return view('my.planning', [
             'employee' => $employee,
+            'next' => $next,
             'from' => $from,
             'to' => $to,
             'weeks' => $days->chunk(7),

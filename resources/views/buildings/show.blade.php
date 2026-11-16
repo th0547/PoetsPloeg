@@ -1,16 +1,49 @@
 <x-app-layout :title="$building->name">
     <x-slot name="header">
-        <div class="flex items-center gap-3">
-            <span class="h-4 w-4 rounded" style="background: {{ $building->color }}"></span>
-            <h1 class="page-title">{{ $building->name }}</h1>
-            @unless ($building->active) <span class="chip">inactief</span> @endunless
+        <div class="flex min-w-0 items-center gap-3">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white" style="background: {{ $building->color }}"><x-icon name="building" class="icon-lg" /></span>
+            <div class="min-w-0">
+                <h1 class="page-title truncate">{{ $building->name }} @unless ($building->active) <span class="badge badge-gray align-middle">inactief</span> @endunless</h1>
+                <p class="truncate text-sm text-gray-500">{{ $building->fullAddress() ?: 'Geen adres' }}</p>
+            </div>
         </div>
         <div class="flex flex-wrap gap-2">
-            <a href="{{ route('buildings.index') }}" class="btn-secondary">‹ Panden</a>
-            <a href="{{ route('buildings.edit', $building) }}" class="btn-secondary">Bewerken</a>
-            <a href="{{ route('shifts.create', ['pand' => $building->id]) }}" class="btn-secondary">+ Losse opdracht</a>
+            <a href="{{ route('buildings.index') }}" class="btn-ghost"><x-icon name="chevron-left" />Panden</a>
+            <a href="{{ route('planning', ['view' => 'building', 'range' => 'week', 'q' => $building->name]) }}" class="btn-secondary"><x-icon name="grid" />In planning</a>
+            <a href="{{ route('shifts.create', ['pand' => $building->id]) }}" class="btn-secondary"><x-icon name="plus" />Losse opdracht</a>
+            <a href="{{ route('buildings.edit', $building) }}" class="btn"><x-icon name="edit" />Bewerken</a>
         </div>
     </x-slot>
+
+    {{-- Nieuw pand: wat moet er nog gebeuren voordat de diensten vanzelf in de planning staan? --}}
+    @php
+        $hasTasks = $building->taskTemplates->isNotEmpty();
+        $hasStaff = $building->taskTemplates->contains(fn ($t) => $t->employees->isNotEmpty());
+    @endphp
+    @unless ($hasTasks && $hasStaff)
+        <ol class="card mb-6 grid gap-px overflow-hidden bg-gray-200 sm:grid-cols-3">
+            <li class="flex items-start gap-3 bg-white p-4">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-600 text-white"><x-icon name="check" /></span>
+                <div><p class="text-sm font-semibold text-gray-900">1. Pandgegevens</p><p class="text-xs text-gray-500">Adres, contact en toegang staan erin.</p></div>
+            </li>
+            <li class="flex items-start gap-3 bg-white p-4">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full {{ $hasTasks ? 'bg-teal-600 text-white' : 'bg-amber-100 text-amber-800 ring-2 ring-amber-300' }}">@if ($hasTasks)<x-icon name="check" />@else<span class="text-xs font-bold">2</span>@endif</span>
+                <div>
+                    <p class="text-sm font-semibold text-gray-900">2. Vaste taken</p>
+                    <p class="text-xs text-gray-500">Wat gebeurt er wanneer? Bijvoorbeeld dagelijkse schoonmaak ma t/m vr 18:00–20:00.</p>
+                    @unless ($hasTasks)<a href="{{ route('buildings.templates.create', $building) }}" class="btn btn-sm mt-2"><x-icon name="plus" class="icon-sm" />Eerste taak toevoegen</a>@endunless
+                </div>
+            </li>
+            <li class="flex items-start gap-3 bg-white p-4">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full {{ $hasStaff ? 'bg-teal-600 text-white' : ($hasTasks ? 'bg-amber-100 text-amber-800 ring-2 ring-amber-300' : 'bg-gray-100 text-gray-400') }}">@if ($hasStaff)<x-icon name="check" />@else<span class="text-xs font-bold">3</span>@endif</span>
+                <div>
+                    <p class="text-sm font-semibold text-gray-900">3. Vaste bezetting</p>
+                    <p class="text-xs text-gray-500">Wie staat er vast op? Je ziet direct of iemand op die tijden kan.</p>
+                    @if ($hasTasks && ! $hasStaff)<a href="#bezetting" class="btn btn-sm mt-2">Vaste krachten kiezen</a>@endif
+                </div>
+            </li>
+        </ol>
+    @endunless
 
     <div x-data @shift-panel-closed.window="if ($event.detail.changed) window.location.reload()" class="grid gap-6 lg:grid-cols-3">
         <div class="lg:col-span-2 space-y-6">
@@ -57,7 +90,6 @@
         <aside class="space-y-6">
             <section class="card card-body space-y-2 text-sm">
                 <h2 class="font-semibold text-gray-800">Pandinfo</h2>
-                <p>{{ $building->fullAddress() ?: 'Geen adres' }}</p>
                 @if ($building->contact_name || $building->contact_phone || $building->contact_email)
                     <p><span class="text-gray-500">Contact:</span> {{ $building->contact_name }}
                         @if ($building->contact_phone)<a href="tel:{{ $building->contact_phone }}" class="text-teal-700 hover:underline">{{ $building->contact_phone }}</a>@endif
@@ -75,7 +107,7 @@
                 <h2 class="font-semibold text-gray-800">Ingewerkt ({{ $building->employees->count() }})</h2>
                 <div class="flex flex-wrap gap-1">
                     @forelse ($building->employees as $employee)
-                        <a href="{{ route('employees.edit', $employee) }}" class="chip hover:bg-teal-50"><span class="me-1 h-2 w-2 rounded-full" style="background: {{ $employee->color }}"></span>{{ $employee->name }}</a>
+                        <a href="{{ route('employees.show', $employee) }}" data-open-employee="{{ $employee->id }}" class="chip hover:bg-teal-50"><span class="me-1 h-2 w-2 rounded-full" style="background: {{ $employee->color }}"></span>{{ $employee->name }}</a>
                     @empty
                         <p class="text-sm text-gray-500">Nog niemand.</p>
                     @endforelse

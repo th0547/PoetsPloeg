@@ -5,13 +5,35 @@
             <p class="text-sm text-gray-500">{{ $from->translatedFormat('j M') }} t/m {{ $to->subDay()->translatedFormat('j M Y') }} · {{ $shiftCount }} {{ $shiftCount === 1 ? 'dienst' : 'diensten' }}, {{ rtrim(rtrim(number_format($hours, 2, ',', ''), '0'), ',') }} uur</p>
         </div>
         <div class="inline-flex items-center gap-1">
-            <a href="{{ route('my.planning', ['vanaf' => $from->subWeeks(4)->toDateString()]) }}" class="btn-secondary btn-sm" aria-label="Vorige weken">‹</a>
+            <a href="{{ route('my.planning', ['vanaf' => $from->subWeeks(4)->toDateString()]) }}" class="btn-icon border border-gray-300 bg-white" aria-label="Vorige weken"><x-icon name="chevron-left" /></a>
             <a href="{{ route('my.planning') }}" class="btn-secondary btn-sm">Vandaag</a>
-            <a href="{{ route('my.planning', ['vanaf' => $to->toDateString()]) }}" class="btn-secondary btn-sm" aria-label="Volgende weken">›</a>
+            <a href="{{ route('my.planning', ['vanaf' => $to->toDateString()]) }}" class="btn-icon border border-gray-300 bg-white" aria-label="Volgende weken"><x-icon name="chevron-right" /></a>
         </div>
     </x-slot>
 
     <div class="max-w-3xl space-y-6">
+        @if ($next)
+            @php
+                $busy = $next->starts_at->isPast();
+                $when = $next->starts_at->isToday() ? 'vandaag' : ($next->starts_at->isTomorrow() ? 'morgen' : $next->starts_at->translatedFormat('l j F'));
+                $mates = $next->employees->where('id', '!=', $employee->id)->pluck('name');
+            @endphp
+            <section class="card overflow-hidden" style="border-left: 4px solid {{ $next->building->color }}">
+                <div class="card-body">
+                    <p class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide {{ $busy ? 'text-emerald-700' : 'text-gray-500' }}">
+                        <span class="dot {{ $busy ? 'dot-working' : 'dot-later' }}"></span>{{ $busy ? 'Nu bezig' : 'Je eerstvolgende dienst' }}
+                    </p>
+                    <p class="mt-1 text-lg font-semibold text-gray-900">{{ ucfirst($when) }}, {{ $next->starts_at->format('H:i') }}–{{ $next->ends_at->format('H:i') }}</p>
+                    <p class="text-sm text-gray-700">{{ $next->building->name }}@if ($next->title) · {{ $next->title }}@endif</p>
+                    @if ($next->building->fullAddress())
+                        <p class="mt-1 flex items-center gap-1.5 text-sm text-gray-500"><x-icon name="map-pin" />{{ $next->building->fullAddress() }}</p>
+                    @endif
+                    @if ($mates->isNotEmpty())
+                        <p class="mt-1 flex items-center gap-1.5 text-sm text-gray-500"><x-icon name="users" />Met {{ $mates->join(', ', ' en ') }}</p>
+                    @endif
+                </div>
+            </section>
+        @endif
         @foreach ($weeks as $week)
             @php($first = $week->first()['date'])
             <section class="card overflow-hidden">
