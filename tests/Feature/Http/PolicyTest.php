@@ -187,9 +187,10 @@ class PolicyTest extends TestCase
         $long = Shift::factory()->at('2026-11-19', '06:00', '19:00')->create();
 
         $checker = app(ConflictChecker::class);
+        // 22:00 tot 06:00 is 8 uur rust: eens per 7 dagen toegestaan, dus een melding.
         $rest = collect($checker->forCandidate($morning, $employee->id)['warnings'])->firstWhere('type', 'rest');
-        $this->assertStringContainsString('Rusttijd 8 u', $rest['message']);
-        $this->assertStringContainsString('minimaal 11 u', $rest['message']);
+        $this->assertSame('info', $rest['level']);
+        $this->assertStringContainsString('Ingekorte rust: 8 u aaneengesloten rust binnen 24 uur vanaf 16-11 17:00', $rest['message']);
         $this->assertContains('Dienst langer dan 12 uur (Arbeidstijdenwet)', array_column($checker->forCandidate($long, $employee->id)['warnings'], 'message'));
 
         // Uit te zetten via het beleid.

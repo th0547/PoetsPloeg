@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\Shift;
 use App\Models\Skill;
 use App\Services\ConflictChecker;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -163,5 +164,98 @@ class ConflictCheckerTest extends TestCase
 
         $this->assertSame('overlap', $result[$shift->id][$employee->id][0]['type']);
         $this->assertSame('overlap', $result[$other->id][$employee->id][0]['type']);
+    }
+
+    /** Rustmeldingen voor deze medewerker op deze dienst: [niveau, tekst]. */
+    private function rest(Shift $shift, Employee $employee): array
+    {
+        return collect(app(ConflictChecker::class)->forCandidate($shift, $employee->id)['warnings'])
+            ->where('type', 'rest')->map(fn ($w) => [$w['level'], $w['message']])->values()->all();
+    }
+
+    private function work(Employee $employee, string $date, string $start, string $end): Shift
+    {
+        $shift = Shift::factory()->at($date, $start, $end)->create();
+        if ($end <= $start) {
+            $shift->update(['ends_at' => CarbonImmutable::parse("$date $end")->addDay()]);
+        }
+        $shift->assignments()->create(['employee_id' => $employee->id]);
+
+        return $shift;
+    }
+
+    public function test_split_shift_on_one_day_is_allowed(): void
+    {
+        $employee = Employee::factory()->create();
+        $this->work($employee, '2026-11-16', '06:00', '08:00');
+        $evening = Shift::factory()->at('2026-11-16', '17:00', '19:00')->create();
+        $this->work($employee, '2026-11-17', '06:00', '08:00');
+
+        // 19:00 tot 06:00 is 11 uur aaneengesloten rust binnen de 24 uur vanaf 06:00.
+        $this->assertSame([], $this->rest($evening, $employee));
+    }
+
+    public function test_short_night_between_late_and_early_shift_gives_a_warning(): void
+    {
+        $employee = Employee::factory()->create();
+        $this->work($employee, '2026-11-16', '17:00', '23:00');
+        // Binnen 24 uur vanaf ma 17:00: rust 23:00–06:00 (7 u) en 14:00–17:00 (3 u).
+        $early = Shift::factory()->at('2026-11-17', '06:00', '14:00')->create();
+
+        [[$level, $message]] = $this->rest($early, $employee);
+        $this->assertSame('warning', $level);
+        $this->assertSame('Te weinig rust: 7 u aaneengesloten rust binnen 24 uur vanaf 16-11 17:00; minimaal 11 u', $message);
+
+        // Telt de wet de rust ná de vroege dienst mee (08:00–17:00 = 9 u), dan is het een ingekorte rust.
+        $short = Shift::factory()->at('2026-11-17', '06:00', '08:00')->create();
+        $this->assertSame('info', $this->rest($short, $employee)[0][0]);
+    }
+
+    public function test_rest_may_be_shortened_to_eight_hours_once_per_seven_days(): void
+    {
+        $employee = Employee::factory()->create();
+        // Ma op di: 22:00 tot 06:00 is 8 uur rust.
+        $this->work($employee, '2026-11-16', '14:00', '22:00');
+        $tuesday = Shift::factory()->at('2026-11-17', '06:00', '08:00')->create();
+        $this->assertSame('info', $this->rest($tuesday, $employee)[0][0]);
+
+        // Een tweede keer in dezelfde 7 dagen (wo op do) is een waarschuwing.
+        $tuesday->assignments()->create(['employee_id' => $employee->id]);
+        $this->work($employee, '2026-11-18', '14:00', '22:00');
+        $thursday = Shift::factory()->at('2026-11-19', '06:00', '08:00')->create();
+        $this->assertSame('warning', $this->rest($thursday, $employee)[0][0]);
+
+        // Minder dan 8 uur is altijd een waarschuwing.
+        $other = Employee::factory()->create();
+        $this->work($other, '2026-11-16', '17:00', '23:30');
+        $long = Shift::factory()->at('2026-11-17', '06:00', '14:00')->create();
+        $this->assertSame('warning', $this->rest($long, $other)[0][0]);
+    }
+
+    public function test_early_morning_shift_is_not_a_night_shift(): void
+    {
+        $employee = Employee::factory()->create();
+        $this->work($employee, '2026-11-18', '07:30', '08:00');
+        $next = Shift::factory()->at('2026-11-18', '08:30', '10:30')->create();
+        $this->work($employee, '2026-11-17', '05:30', '08:00');
+
+        $this->assertSame([], $this->rest($next, $employee));
+        $this->assertFalse(ConflictChecker::isNightShift(new \DateTime('2026-11-18 07:30'), new \DateTime('2026-11-18 08:00')));
+        $this->assertFalse(ConflictChecker::isNightShift(new \DateTime('2026-11-18 05:30'), new \DateTime('2026-11-18 08:00')));
+        $this->assertFalse(ConflictChecker::isNightShift(new \DateTime('2026-11-18 00:00'), new \DateTime('2026-11-18 01:30')));
+        $this->assertTrue(ConflictChecker::isNightShift(new \DateTime('2026-11-17 22:00'), new \DateTime('2026-11-18 04:00')));
+        $this->assertTrue(ConflictChecker::isNightShift(new \DateTime('2026-11-18 04:00'), new \DateTime('2026-11-18 08:00')));
+    }
+
+    public function test_fourteen_hours_rest_after_a_night_shift(): void
+    {
+        $employee = Employee::factory()->create();
+        $this->work($employee, '2026-11-16', '22:00', '04:00');
+        $afternoon = Shift::factory()->at('2026-11-17', '16:00', '18:00')->create();
+        $evening = Shift::factory()->at('2026-11-17', '19:00', '21:00')->create();
+
+        $messages = array_column($this->rest($afternoon, $employee), 1);
+        $this->assertContains('Rusttijd 12 u na nachtdienst Schoonmaak (17-11 04:00); minimaal 14 u', $messages);
+        $this->assertStringNotContainsString('nachtdienst', implode(' ', array_column($this->rest($evening, $employee), 1)));
     }
 }
