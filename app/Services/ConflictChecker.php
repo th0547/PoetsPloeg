@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Controleert toewijzingen van medewerkers aan diensten: dubbel ingepland, afwezig, buiten
- * beschikbaarheid, ontbrekende vaardigheid, onbekend pand en contracturen.
+ * beschikbaarheid, ontbrekende vaardigheid, onbekend pand, contracturen, rusttijden en dienstduur.
  *
  * Alle benodigde gegevens worden per aanroep in één keer geladen, zodat een hele week
  * of maand zonder N+1-queries kan worden gecontroleerd.
@@ -26,6 +26,8 @@ class ConflictChecker
 
     public const INFO = 'info';
 
+    private const DAY = 86400;
+
     /** @var Collection<int, Employee> */
     private Collection $employees;
 
@@ -37,6 +39,9 @@ class ConflictChecker
 
     /** @var array<int, string> */
     private array $skillNames = [];
+
+    /** @var array<int, list<array>> rustvensters per medewerker zoals opgeslagen (zie restWindows) */
+    private array $restWindowCache = [];
 
     /**
      * Waarschuwingen voor alle bestaande toewijzingen van de gegeven diensten.
@@ -160,9 +165,11 @@ class ConflictChecker
 
     private function load(Collection $employeeIds, \DateTimeInterface $from, \DateTimeInterface $to, ?int $ignoreTemplateId = null): void
     {
-        // Volledige ISO-weken laden voor de urentelling, plus een dag marge voor nachtdiensten.
-        $windowStart = CarbonImmutable::instance($from)->startOfWeek()->subDay();
-        $windowEnd = CarbonImmutable::instance($to)->endOfWeek()->addDay();
+        // 9 dagen marge: genoeg voor volledige ISO-weken (urentelling), nachtdiensten en de rusttijden
+        // (ingekorte dagelijkse rust mag één keer per 7 × 24 uur, dus de week ervoor en erna telt mee).
+        $windowStart = CarbonImmutable::instance($from)->startOfDay()->subDays(9);
+        $windowEnd = CarbonImmutable::instance($to)->endOfDay()->addDays(9);
+        $this->restWindowCache = [];
 
         $this->employees = Employee::query()
             ->with(['skills:id', 'buildings:id', 'availabilityPatterns', 'availabilityDays'])
@@ -278,7 +285,7 @@ class ConflictChecker
             ));
         }
 
-        array_push($warnings, ...$this->workingTimeWarnings($shift, $mine, $start, $end, $newWeekHours));
+        array_push($warnings, ...$this->workingTimeWarnings($shift, $employeeId, $mine, $start, $end, $newWeekHours));
 
         return [
             'warnings' => $warnings,
@@ -303,7 +310,7 @@ class ConflictChecker
      *
      * @return list<array>
      */
-    private function workingTimeWarnings(Shift $shift, Collection $mine, CarbonImmutable $start, CarbonImmutable $end, float $weekHours): array
+    private function workingTimeWarnings(Shift $shift, int $employeeId, Collection $mine, CarbonImmutable $start, CarbonImmutable $end, float $weekHours): array
     {
         $policy = Policy::at($start);
         if (! $policy->get('roster.warn_in_planning')) {
@@ -324,22 +331,7 @@ class ConflictChecker
             }
         }
 
-        $others = $mine->filter(fn ($a) => $a->shift_id !== $shift->id);
-        $previous = $others->filter(fn ($a) => $a->ends_at->lte($start))->sortByDesc(fn ($a) => $a->ends_at->getTimestamp())->first();
-        $next = $others->filter(fn ($a) => $a->starts_at->gte($end))->sortBy(fn ($a) => $a->starts_at->getTimestamp())->first();
-        $required = fn (CarbonImmutable $endsAt) => $this->isNightEnd($endsAt)
-            ? $policy->get('roster.rest_after_night_hours')
-            : $policy->get('roster.rest_daily_hours');
-        if ($previous && ($gap = $previous->ends_at->diffInMinutes($start) / 60) < $required($previous->ends_at)) {
-            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
-                'Rusttijd %s u na %s (%s); minimaal %s u', $this->num($gap), $previous->title, $previous->ends_at->format('d-m H:i'), $this->num($required($previous->ends_at)),
-            ));
-        }
-        if ($next && ($gap = $end->diffInMinutes($next->starts_at) / 60) < $required($end)) {
-            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
-                'Rusttijd %s u tot %s (%s); minimaal %s u', $this->num($gap), $next->title, $next->starts_at->format('d-m H:i'), $this->num($required($end)),
-            ));
-        }
+        array_push($warnings, ...$this->restWarnings($shift, $employeeId, $mine, $start, $end, $policy));
 
         $weekMax = $policy->get('roster.max_week_hours_law');
         if ($weekHours > $weekMax) {
@@ -349,12 +341,197 @@ class ConflictChecker
         return $warnings;
     }
 
-    /** Nachtdienst die na 02:00 eindigt (Arbeidstijdenwet art. 5:8): eindtijd tussen 02:00 en 08:00. */
-    private function isNightEnd(CarbonImmutable $endsAt): bool
+    /**
+     * Rusttijden (issues #67 en #68).
+     *
+     * - Na een nachtdienst die na 02:00 eindigt: minstens 14 uur rust tot de volgende dienst (ATW art. 5:8 lid 4).
+     * - Dagelijkse rust (ATW art. 5:3 lid 2 en 3): in elke 24 uur, te rekenen vanaf de eerste dienst van de dag,
+     *   minstens 11 uur aaneengesloten rust. Het gaat om de langste rust in dat venster, niet om het gat tussen
+     *   twee diensten: een gebroken dienst (06:00–08:00 en 17:00–19:00) is in orde als er daarna nog 11 uur rust
+     *   volgt. Eén keer per 7 × 24 uur mag die rust worden ingekort tot 8 uur (info); een tweede keer of minder
+     *   dan 8 uur is een waarschuwing.
+     *
+     * @return list<array>
+     */
+    private function restWarnings(Shift $shift, int $employeeId, Collection $mine, CarbonImmutable $start, CarbonImmutable $end, Policy $policy): array
     {
-        $minutes = $endsAt->hour * 60 + $endsAt->minute;
+        $warnings = [];
 
-        return $minutes > 120 && $minutes <= 480;
+        $nightRest = $policy->get('roster.rest_after_night_hours');
+        $others = $mine->filter(fn ($a) => $a->shift_id !== $shift->id);
+        $previous = $others->filter(fn ($a) => $a->ends_at->lte($start))->sortByDesc(fn ($a) => $a->ends_at->getTimestamp())->first();
+        $next = $others->filter(fn ($a) => $a->starts_at->gte($end))->sortBy(fn ($a) => $a->starts_at->getTimestamp())->first();
+        if ($previous && $this->isNightShift($previous->starts_at, $previous->ends_at)
+            && ($gap = $previous->ends_at->diffInMinutes($start) / 60) < $nightRest) {
+            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
+                'Rusttijd %s u na nachtdienst %s (%s); minimaal %s u', $this->num($gap), $previous->title, $previous->ends_at->format('d-m H:i'), $this->num($nightRest),
+            ));
+        }
+        if ($next && $this->isNightShift($start, $end)
+            && ($gap = $end->diffInMinutes($next->starts_at) / 60) < $nightRest) {
+            $warnings[] = $this->warning('rest', self::WARNING, sprintf(
+                'Rusttijd %s u na deze nachtdienst, tot %s (%s); minimaal %s u', $this->num($gap), $next->title, $next->starts_at->format('d-m H:i'), $this->num($nightRest),
+            ));
+        }
+        $afterNight = $warnings !== [];
+
+        $required = (int) round($policy->get('roster.rest_daily_hours') * 3600);
+        $minimum = min($required, (int) round($policy->get('roster.rest_daily_min_shortened') * 3600));
+        $windows = $this->restWindowsFor($shift, $employeeId, $mine, $start, $end);
+        // Deze dienst valt in het venster van zijn eigen dag, en mogelijk in dat van de dag ervoor.
+        $day = $start->toDateString();
+        $previousDay = $start->subDay()->toDateString();
+        $reported = [];
+        foreach ($windows as $window) {
+            $contains = $window['day'] === $day
+                || ($window['day'] === $previousDay && $start->getTimestamp() < $window['start'] + self::DAY);
+            if (! $contains || $window['rest'] >= $required || isset($reported[$window['from']])) {
+                continue;
+            }
+            $reported[$window['from']] = true;
+
+            $from = $this->at($window['start'], $start)->format('d-m H:i');
+            $rest = $this->num($window['rest'] / 3600);
+            $period = $this->period($this->at($window['from'], $start), $this->at($window['to'], $start));
+            if ($window['rest'] < $minimum) {
+                $warnings[] = $this->warning('rest', self::WARNING, sprintf(
+                    'Minder dan %s u aaneengesloten rust in de 24 u vanaf %s; langste rust %s u (%s)',
+                    $this->num($required / 3600), $from, $rest, $period,
+                ));
+
+                continue;
+            }
+
+            // Ingekorte rust: mag één keer per 7 × 24 uur. Een andere korte rust in die periode telt als eerdere keer.
+            $other = collect($windows)
+                ->filter(fn ($w) => $w['from'] !== $window['from'] && $w['rest'] < $required && abs($w['start'] - $window['start']) < 7 * self::DAY)
+                ->sortBy(fn ($w) => abs($w['start'] - $window['start']))
+                ->first();
+            if ($other) {
+                $warnings[] = $this->warning('rest', self::WARNING, sprintf(
+                    'Ingekorte rust %s u in de 24 u vanaf %s (%s); ook op %s, mag één keer per 7 dagen (minimaal %s u)',
+                    $rest, $from, $period, $this->at($other['from'], $start)->format('d-m'), $this->num($required / 3600),
+                ));
+            } elseif (! $afterNight) {
+                $warnings[] = $this->warning('rest', self::INFO, sprintf(
+                    'Ingekorte rust %s u in de 24 u vanaf %s (%s); mag één keer per 7 dagen',
+                    $rest, $from, $period,
+                ));
+            }
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * Rustvensters van de medewerker met deze dienst op de gegeven tijden. Voor bestaande diensten op hun
+     * opgeslagen tijden is dat voor alle diensten van de medewerker hetzelfde en wordt het één keer berekend.
+     *
+     * @return list<array{day: string, start: int, rest: int, from: int, to: int}>
+     */
+    private function restWindowsFor(Shift $shift, int $employeeId, Collection $mine, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $stored = $shift->id !== null
+            && $mine->contains(fn ($a) => $a->shift_id === $shift->id && $a->starts_at->eq($start) && $a->ends_at->eq($end));
+        if ($stored) {
+            return $this->restWindowCache[$employeeId] ??= $this->restWindows($mine->map(fn ($a) => [$a->starts_at, $a->ends_at]));
+        }
+
+        $from = $start->subDays(9);
+        $to = $end->addDays(9);
+
+        return $this->restWindows($mine
+            ->filter(fn ($a) => $a->shift_id !== $shift->id && $a->ends_at->gt($from) && $a->starts_at->lt($to))
+            ->map(fn ($a) => [$a->starts_at, $a->ends_at])
+            ->push([$start, $end]));
+    }
+
+    /**
+     * Per werkdag het venster van 24 uur vanaf de eerste dienst die op die dag begint (ATW art. 5:3 lid 3), met de
+     * langste aaneengesloten rust erin. Tijden zijn timestamps, de rust is in seconden. "from" is het einde van de
+     * dienst waarna die rust begint en wijst de rust dus eenduidig aan (twee vensters kunnen dezelfde rust delen).
+     *
+     * @param  Collection<int, array{0: CarbonImmutable, 1: CarbonImmutable}>  $shifts  begin en eind
+     * @return list<array{day: string, start: int, rest: int, from: int, to: int}>
+     */
+    private function restWindows(Collection $shifts): array
+    {
+        $firstStart = [];
+        $intervals = [];
+        foreach ($shifts as [$s, $e]) {
+            $day = $s->toDateString();
+            $firstStart[$day] = min($firstStart[$day] ?? PHP_INT_MAX, $s->getTimestamp());
+            $intervals[] = [$s->getTimestamp(), $e->getTimestamp()];
+        }
+        ksort($firstStart);
+        sort($intervals);
+
+        // Aansluitende en overlappende diensten samenvoegen tot werkblokken.
+        $blocks = [];
+        foreach ($intervals as [$s, $e]) {
+            $last = array_key_last($blocks);
+            if ($last !== null && $s <= $blocks[$last][1]) {
+                $blocks[$last][1] = max($blocks[$last][1], $e);
+            } else {
+                $blocks[] = [$s, $e];
+            }
+        }
+
+        $windows = [];
+        foreach ($firstStart as $day => $windowStart) {
+            $windowEnd = $windowStart + self::DAY;
+            $cursor = $windowStart;
+            $best = ['rest' => 0, 'from' => $windowStart, 'to' => $windowStart];
+            foreach ($blocks as [$s, $e]) {
+                if ($e <= $windowStart) {
+                    continue;
+                }
+                if ($s >= $windowEnd) {
+                    break;
+                }
+                if ($s - $cursor > $best['rest']) {
+                    $best = ['rest' => $s - $cursor, 'from' => $cursor, 'to' => $s];
+                }
+                $cursor = max($cursor, $e);
+            }
+            if ($windowEnd - $cursor > $best['rest']) {
+                $best = ['rest' => $windowEnd - $cursor, 'from' => $cursor, 'to' => $windowEnd];
+            }
+            $windows[] = ['day' => (string) $day, 'start' => $windowStart] + $best;
+        }
+
+        return $windows;
+    }
+
+    /**
+     * Nachtdienst die na 02:00 eindigt (ATW art. 1:7 en 5:8 lid 4): meer dan een uur arbeid tussen 00:00 en 06:00,
+     * en de dienst eindigt na 02:00. Een vroege dienst als 05:30–08:00 of 07:30–08:00 is dus geen nachtdienst.
+     */
+    private function isNightShift(CarbonImmutable $start, CarbonImmutable $end): bool
+    {
+        $nightMinutes = 0;
+        $lastMidnight = $start->startOfDay();
+        for ($midnight = $start->startOfDay(); $midnight->lt($end); $midnight = $midnight->addDay()) {
+            $from = $start->max($midnight);
+            $to = $end->min($midnight->setTime(6, 0));
+            if ($to->gt($from)) {
+                $nightMinutes += $from->diffInMinutes($to);
+            }
+            $lastMidnight = $midnight;
+        }
+
+        return $nightMinutes > 60 && $end->gt($lastMidnight->setTime(2, 0));
+    }
+
+    private function at(int $timestamp, CarbonImmutable $reference): CarbonImmutable
+    {
+        return CarbonImmutable::createFromTimestamp($timestamp, $reference->getTimezone());
+    }
+
+    /** "17-11 23:00–18-11 06:00", of "18-11 08:00–17:00" binnen één dag. */
+    private function period(CarbonImmutable $from, CarbonImmutable $to): string
+    {
+        return $from->format('d-m H:i').'–'.($from->isSameDay($to) ? $to->format('H:i') : $to->format('d-m H:i'));
     }
 
     private function hoursInWeek(int $employeeId, CarbonImmutable $weekStart, ?int $excludeShiftId = null): float

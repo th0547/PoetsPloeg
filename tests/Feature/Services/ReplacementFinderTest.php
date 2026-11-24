@@ -59,6 +59,20 @@ class ReplacementFinderTest extends TestCase
         $this->assertContains('Kan niet: School (08:00–15:00)', array_column($result['candidates'][1]['reasons'], 'text'));
     }
 
+    public function test_split_shift_does_not_make_a_candidate_cautionary(): void
+    {
+        // Issue #67: 06:00–08:00 al ingepland; 17:00–19:00 erbij is een gebroken dienst en mag.
+        $shift = Shift::factory()->at('2026-11-17', '17:00', '19:00')->create();
+        $employee = Employee::factory()->create(['name' => 'Gebroken']);
+        $morning = Shift::factory()->at('2026-11-17', '06:00', '08:00')->create();
+        $morning->assignments()->create(['employee_id' => $employee->id]);
+
+        $result = app(ReplacementFinder::class)->candidates($shift);
+
+        $this->assertSame('best', $result['candidates'][0]['fit']);
+        $this->assertSame([], array_values(array_filter($result['candidates'][0]['warnings'], fn ($w) => $w['type'] === 'rest')));
+    }
+
     public function test_prefers_employee_with_fewer_hours_on_equal_score(): void
     {
         $shift = Shift::factory()->at('2026-10-14', '18:00', '20:00')->create();
