@@ -10,6 +10,7 @@ use App\Services\Audit;
 use App\Services\DutchHolidays;
 use App\Services\FixedStaffCheck;
 use App\Services\ShiftGenerator;
+use App\Services\StaffHours;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -54,7 +55,7 @@ class BuildingController extends Controller
         return redirect()->route('buildings.show', $building)->with('status', 'Pand aangemaakt. Voeg nu de vaste taken toe.');
     }
 
-    public function show(Request $request, Building $building, ShiftGenerator $generator, DutchHolidays $holidays): View
+    public function show(Request $request, Building $building, ShiftGenerator $generator, DutchHolidays $holidays, StaffHours $staffHours): View
     {
         $building->load(['taskTemplates.skills', 'taskTemplates.patterns.employees', 'employees']);
         if (Gate::allows('view-contact-details')) {
@@ -100,6 +101,10 @@ class BuildingController extends Controller
             'holidays' => $holidays->between($weekStart, $weekEnd),
             'staffEmployees' => $staffEmployees->sortBy(fn ($e) => [in_array($e->id, $knownIds) ? 0 : 1, $e->name])->values(),
             'knownIds' => $knownIds,
+            // Uren personeel: wat de vaste taken per week vragen, en wat er in de gekozen week is ingepland.
+            'templateHours' => $building->taskTemplates->mapWithKeys(fn ($t) => [$t->id => $staffHours->perWeek($t)]),
+            'rowHours' => $staffHours->forShifts($shifts)['per_row'],
+            'weekHours' => $staffHours->forShifts($shifts->whereNotNull('task_template_id')),
         ]);
     }
 

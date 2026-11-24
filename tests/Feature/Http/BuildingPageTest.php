@@ -43,6 +43,28 @@ class BuildingPageTest extends TestCase
             ->assertOk()->assertSee('week 43')->assertSee('ma. 19 okt.');
     }
 
+    public function test_shows_staff_hours_of_fixed_tasks(): void
+    {
+        $building = Building::factory()->create();
+        // Ma t/m vr 1,5 uur met 2 personen = 15 u per week; Anna staat er vast op, de tweede plek is open.
+        $daily = TaskTemplate::factory()->weekly([1, 2, 3, 4, 5])->create(['building_id' => $building->id, 'name' => 'Toilettenronde', 'start_time' => '08:00', 'end_time' => '09:30', 'required_staff' => 2, 'valid_from' => '2026-10-01']);
+        $anna = Employee::factory()->create(['name' => 'Anna Jansen']);
+        $this->assignFixed($daily, $anna);
+        // Om de week op woensdag 2 uur = gemiddeld 1 u per week.
+        TaskTemplate::factory()->weekly([3], 2)->create(['building_id' => $building->id, 'name' => 'Glas', 'start_time' => '10:00', 'end_time' => '12:00', 'valid_from' => '2026-10-12']);
+        // Een inactieve taak telt niet mee.
+        TaskTemplate::factory()->weekly([1])->create(['building_id' => $building->id, 'name' => 'Oud', 'active' => false, 'valid_from' => '2026-10-01']);
+
+        $this->get(route('buildings.show', $building))->assertOk()
+            ->assertSeeInOrder(['16 u', 'personeel per week'])
+            ->assertSee('15 u personeel per week')
+            ->assertSeeInOrder(['1 u personeel per week', '(gemiddeld)'])
+            // Week 42 (12–18 okt): 15 u Toilettenronde + 2 u Glas nodig, alleen Anna's 7,5 u is ingepland.
+            ->assertSeeInOrder(['Vaste taken deze week:', '7,5 u', 'ingepland van 17 u', '9,5 u open'])
+            ->assertSeeInOrder(['Anna Jansen', '7,5 u'])
+            ->assertSee('7,5 / 15 u');
+    }
+
     public function test_one_off_shifts_get_their_own_row_and_weekend_shows_when_needed(): void
     {
         $building = Building::factory()->create();

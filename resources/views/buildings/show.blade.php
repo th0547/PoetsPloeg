@@ -53,7 +53,15 @@
                         <h2 class="font-semibold text-gray-800">Vaste taken</h2>
                         <p class="text-xs text-gray-500">Uit deze taken worden de diensten automatisch ingepland ({{ config('poetsploeg.generate_weeks_ahead') }} weken vooruit).</p>
                     </div>
-                    <a href="{{ route('buildings.templates.create', $building) }}" class="btn btn-sm">+ Taak</a>
+                    <div class="flex items-center gap-4">
+                        @if ($templateHours->sum() > 0)
+                            <div class="text-right" title="Duur × aantal personen van alle actieve vaste taken, in een normale week">
+                                <p class="text-lg font-semibold leading-tight text-gray-900">{{ \App\Support\Planning::hours($templateHours->sum()) }} u</p>
+                                <p class="whitespace-nowrap text-xs text-gray-500">personeel per week</p>
+                            </div>
+                        @endif
+                        <a href="{{ route('buildings.templates.create', $building) }}" class="btn btn-sm">+ Taak</a>
+                    </div>
                 </div>
                 <ul class="divide-y">
                     @forelse ($building->taskTemplates as $template)
@@ -62,7 +70,12 @@
                                 <div>
                                     <a href="{{ route('buildings.templates.edit', [$building, $template]) }}" class="font-medium text-gray-900 hover:text-teal-700">{{ $template->name }}</a>
                                     @unless ($template->active) <span class="chip">inactief</span> @endunless
-                                    <p class="text-sm text-gray-600">{{ $template->required_staff }} {{ $template->required_staff === 1 ? 'persoon' : 'personen' }} per dienst</p>
+                                    <p class="text-sm text-gray-600">
+                                        {{ $template->required_staff }} {{ $template->required_staff === 1 ? 'persoon' : 'personen' }} per dienst
+                                        @if ($templateHours[$template->id] > 0)
+                                            · <span class="font-medium text-gray-800">{{ \App\Support\Planning::hours($templateHours[$template->id]) }} u personeel per week</span>@unless (\App\Services\StaffHours::isRegular($template))<span class="text-gray-500" title="Niet elke week gelijk: gemiddeld over het komende jaar"> (gemiddeld)</span>@endunless
+                                        @endif
+                                    </p>
                                     <div class="mt-1 flex flex-wrap gap-1">
                                         @foreach ($template->skills as $skill)<span class="chip">{{ $skill->name }}</span>@endforeach
                                     </div>
@@ -119,12 +132,28 @@
 
     {{-- Weekrooster: per werkdag wie er op welke taak staat --}}
     <section class="card mt-6">
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
-            <div>
+        <div class="flex flex-wrap items-start justify-between gap-2 border-b px-4 py-3">
+            <div class="min-w-0 flex-1">
                 <h2 class="font-semibold text-gray-800">Weekrooster · week {{ $weekStart->isoWeek() }}</h2>
                 <p class="text-xs text-gray-500">{{ $weekStart->translatedFormat('j M') }} – {{ $weekStart->addDays(6)->translatedFormat('j M Y') }}. Klik op een dienst om medewerkers toe te wijzen of een vervanger te zoeken.</p>
+                @if ($weekHours['needed'] > 0)
+                    {{-- Uren personeel van de vaste taken in deze week: totaal, open en per medewerker. --}}
+                    <p class="mt-1 text-sm text-gray-700">
+                        Vaste taken deze week: <strong>{{ \App\Support\Planning::hours($weekHours['planned']) }} u</strong> ingepland van {{ \App\Support\Planning::hours($weekHours['needed']) }} u
+                        @if ($weekHours['open'] > 0)<span class="text-orange-700">· {{ \App\Support\Planning::hours($weekHours['open']) }} u open</span>@endif
+                    </p>
+                    @if ($weekHours['per_employee'])
+                        <div class="mt-1 flex flex-wrap gap-1">
+                            @foreach ($weekHours['per_employee'] as $row)
+                                <a href="{{ route('employees.show', $row['employee']) }}" data-open-employee="{{ $row['employee']->id }}" class="chip hover:bg-teal-50">
+                                    <span class="me-1 h-2 w-2 rounded-full" style="background: {{ $row['employee']->color }}"></span>{{ $row['employee']->name }} <span class="ms-1 text-gray-500">{{ \App\Support\Planning::hours($row['hours']) }} u</span>
+                                </a>
+                            @endforeach
+                        </div>
+                    @endif
+                @endif
             </div>
-            <div class="flex items-center gap-1">
+            <div class="flex shrink-0 items-center gap-1">
                 <a href="{{ route('buildings.show', [$building, 'week' => $weekStart->subWeek()->toDateString()]) }}#weekrooster" class="btn-secondary btn-sm" aria-label="Vorige week">‹</a>
                 <a href="{{ route('buildings.show', $building) }}#weekrooster" class="btn-secondary btn-sm">Deze week</a>
                 <a href="{{ route('buildings.show', [$building, 'week' => $weekStart->addWeek()->toDateString()]) }}#weekrooster" class="btn-secondary btn-sm" aria-label="Volgende week">›</a>
@@ -164,6 +193,10 @@
                                 <td class="sticky left-0 z-10 w-36 min-w-[8rem] bg-white px-3 py-2 align-top sm:w-auto sm:min-w-[12rem]">
                                     <div class="font-medium text-gray-900">{{ $row['name'] }}</div>
                                     <div class="text-xs text-gray-500">{{ $row['time'] }}</div>
+                                    {{-- Geen inline-php hier: verderop staat een php-blok en Blade zou die twee aan elkaar koppelen. --}}
+                                    @isset($rowHours[$row['key']])
+                                        <div class="text-xs {{ $rowHours[$row['key']]['planned'] < $rowHours[$row['key']]['needed'] ? 'text-orange-700' : 'text-gray-500' }}" title="Uren personeel deze week: ingepland / nodig">{{ \App\Support\Planning::hours($rowHours[$row['key']]['planned']) }} / {{ \App\Support\Planning::hours($rowHours[$row['key']]['needed']) }} u</div>
+                                    @endisset
                                 </td>
                                 @foreach ($days as $day)
                                     <td class="px-2 py-2 align-top {{ $day->isToday() ? 'bg-teal-50/40' : '' }}">
