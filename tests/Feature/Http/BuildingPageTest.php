@@ -26,7 +26,7 @@ class BuildingPageTest extends TestCase
         $building = Building::factory()->create();
         $template = TaskTemplate::factory()->weekly([1, 2, 3, 4, 5])->create(['building_id' => $building->id, 'name' => 'Toilettenronde', 'start_time' => '08:00', 'end_time' => '09:30', 'valid_from' => '2026-10-01']);
         $anna = Employee::factory()->create(['name' => 'Anna Jansen']);
-        $template->employees()->attach($anna);
+        $this->assignFixed($template, $anna);
 
         $response = $this->get(route('buildings.show', $building))->assertOk();
 
@@ -63,11 +63,11 @@ class BuildingPageTest extends TestCase
 
         $this->put(route('buildings.staffing', $building), [
             'staff' => [$a->id => 3, $b->id => 1],
-            'fixed' => [$a->id => [$e1->id, $e2->id, $e3->id], $b->id => [$e2->id]],
+            'fixed' => [$a->patterns->first()->id => [$e1->id, $e2->id, $e3->id], $b->patterns->first()->id => [$e2->id]],
         ])->assertRedirect(route('buildings.show', $building))->assertSessionHasNoErrors();
 
         $this->assertSame(3, $a->fresh()->required_staff);
-        $this->assertEqualsCanonicalizing([$e1->id, $e2->id, $e3->id], $a->employees()->pluck('employees.id')->all());
+        $this->assertEqualsCanonicalizing([$e1->id, $e2->id, $e3->id], $this->fixedIds($a));
         $this->assertEqualsCanonicalizing([$e1->id, $e2->id, $e3->id], $building->employees()->pluck('employees.id')->all());
 
         $wednesday = Shift::where('task_template_id', $a->id)->whereDate('date', '2026-10-14')->first();
@@ -85,7 +85,7 @@ class BuildingPageTest extends TestCase
         $shift = Shift::where('task_template_id', $template->id)->whereDate('date', '2026-10-14')->first();
         $shift->update(['is_modified' => true]);
 
-        $this->put(route('buildings.staffing', $building), ['fixed' => [$template->id => [$employee->id]]]);
+        $this->put(route('buildings.staffing', $building), ['fixed' => [$template->patterns->first()->id => [$employee->id]]]);
 
         $this->assertSame(0, $shift->assignments()->count());
         $this->assertSame(1, Shift::where('task_template_id', $template->id)->whereDate('date', '2026-10-21')->first()->assignments()->count());
@@ -97,7 +97,7 @@ class BuildingPageTest extends TestCase
         $other = TaskTemplate::factory()->create();
         $employee = Employee::factory()->create();
 
-        $this->put(route('buildings.staffing', $building), ['fixed' => [$other->id => [$employee->id]]])->assertStatus(422);
-        $this->assertSame(0, $other->employees()->count());
+        $this->put(route('buildings.staffing', $building), ['fixed' => [$other->patterns->first()->id => [$employee->id]]])->assertStatus(422);
+        $this->assertSame([], $this->fixedIds($other));
     }
 }

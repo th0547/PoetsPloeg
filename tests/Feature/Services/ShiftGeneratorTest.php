@@ -120,7 +120,7 @@ class ShiftGeneratorTest extends TestCase
         $template = TaskTemplate::factory()->weekly([1, 3])->create(['required_staff' => 2]);
         $template->skills()->attach($skill);
         [$a, $b, $c] = Employee::factory()->count(3)->create();
-        $template->employees()->attach([$a->id => ['position' => 0], $b->id => ['position' => 1], $c->id => ['position' => 2]]);
+        $this->assignFixed($template, $a, $b, $c);
         Absence::factory()->create([
             'employee_id' => $a->id, 'starts_at' => '2026-10-14 00:00', 'ends_at' => '2026-10-14 23:59',
         ]);

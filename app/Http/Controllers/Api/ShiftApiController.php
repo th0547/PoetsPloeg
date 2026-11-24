@@ -135,7 +135,7 @@ class ShiftApiController extends Controller
 
     private function present(Shift $shift): array
     {
-        $shift->load(['building', 'template.employees:id,name,color,active', 'pattern', 'skills:id,name', 'assignments.employee:id,name,phone,color']);
+        $shift->load(['building', 'template.patterns.employees:id,name,color,active', 'pattern', 'skills:id,name', 'assignments.employee:id,name,phone,color']);
         $warnings = $this->checker->forShifts(collect([$shift]))[$shift->id] ?? [];
         $contact = Gate::allows('view-contact-details');
         $now = now();

@@ -8,10 +8,12 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Validation\Rule;
 
 /**
- * Eén herhalingspatroon van een vaste taak. Een taak kan er meerdere hebben, bijv. "om de week op
+ * Eén herhalingspatroon van een vaste taak, met eigen tijden en eigen vaste bezetting. Een taak kan er
+ * meerdere hebben, bijv. "ma, wo, vr 10:00–12:00 (Henk)" en "di, do 12:00–13:00 (Jan)", of "om de week op
  * donderdag" en "om de week op maandag" die in verschillende weken beginnen (starts_on).
  */
 class TaskTemplatePattern extends Model
@@ -52,6 +54,12 @@ class TaskTemplatePattern extends Model
         return $this->belongsTo(TaskTemplate::class, 'task_template_id');
     }
 
+    /** Vaste bezetting van dit patroon, in volgorde (bij te weinig plekken gaan de eersten voor). */
+    public function employees(): BelongsToMany
+    {
+        return $this->belongsToMany(Employee::class, 'employee_task_template_pattern')->withPivot('position')->orderByPivot('position');
+    }
+
     /** Validatie van de patronen uit het formulier (veld "patterns"). */
     public static function rules(): array
     {
@@ -66,17 +74,38 @@ class TaskTemplatePattern extends Model
             'patterns.*.day_of_month' => ['required_if:patterns.*.recurrence,monthly_day', 'nullable', 'integer', 'between:1,31'],
             'patterns.*.rrule' => ['required_if:patterns.*.recurrence,rrule', 'nullable', 'string', 'max:300', new ValidRecurrenceRule],
             'patterns.*.starts_on' => ['nullable', 'date'],
-            'patterns.*.own_times' => ['boolean'],
-            'patterns.*.start_time' => ['nullable', 'required_if_accepted:patterns.*.own_times', 'date_format:H:i'],
-            'patterns.*.end_time' => ['nullable', 'required_if_accepted:patterns.*.own_times', 'date_format:H:i'],
+            'patterns.*.start_time' => ['required', 'date_format:H:i'],
+            'patterns.*.end_time' => ['required', 'date_format:H:i', 'different:patterns.*.start_time'],
+            'patterns.*.id' => ['nullable', 'integer'],
+            'patterns.*.employees' => ['array'],
+            'patterns.*.employees.*' => ['integer', 'exists:employees,id'],
         ];
+    }
+
+    /** Meldingen bij rules(). */
+    public static function messages(): array
+    {
+        return [
+            'patterns.required' => 'Voeg minimaal één patroon toe.',
+            'patterns.max' => 'Een taak kan hoogstens '.self::MAX_PER_TEMPLATE.' patronen hebben.',
+            'patterns.*.weekdays.required_if' => 'Kies minimaal één weekdag.',
+            'patterns.*.rrule.required_if' => 'Vul een code in.',
+            'patterns.*.start_time.required' => 'Vul een begintijd in.',
+            'patterns.*.end_time.required' => 'Vul een eindtijd in.',
+            'patterns.*.end_time.different' => 'Begin- en eindtijd mogen niet gelijk zijn.',
+        ];
+    }
+
+    /** Vaste krachten uit gevalideerde formulierdata, in volgorde en zonder dubbelen. */
+    public static function employeeIdsFromInput(array $input): array
+    {
+        return collect($input['employees'] ?? [])->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 
     /** Uit gevalideerde formulierdata naar kolommen. */
     public static function attributesFromInput(array $input, int $position): array
     {
         $recurrence = $input['recurrence'];
-        $own = filter_var($input['own_times'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         return [
             'position' => $position,
@@ -89,8 +118,8 @@ class TaskTemplatePattern extends Model
             // Opgeslagen in genormaliseerde vorm: alleen de veilige, geparste onderdelen.
             'rrule' => $recurrence === 'rrule' ? RecurrenceRule::normalize($input['rrule']) : null,
             'starts_on' => $input['starts_on'] ?? null,
-            'start_time' => $own ? $input['start_time'] : null,
-            'end_time' => $own ? $input['end_time'] : null,
+            'start_time' => $input['start_time'],
+            'end_time' => $input['end_time'],
         ];
     }
 
@@ -99,7 +128,13 @@ class TaskTemplatePattern extends Model
         return $this->start_time !== null && $this->end_time !== null;
     }
 
-    /** Begintijd (H:i:s of H:i): eigen tijd of die van de taak. */
+    /** "10:00–12:00". */
+    public function timesLabel(TaskTemplate $template): string
+    {
+        return substr($this->startTime($template), 0, 5).'–'.substr($this->endTime($template), 0, 5);
+    }
+
+    /** Begintijd (H:i:s of H:i). Patronen hebben eigen tijden; die van de taak zijn alleen een terugval voor oude gegevens. */
     public function startTime(TaskTemplate $template): string
     {
         return $this->hasOwnTimes() ? $this->start_time : $template->start_time;
@@ -205,9 +240,10 @@ class TaskTemplatePattern extends Model
             'dayOfMonth' => (int) ($this->day_of_month ?? 1),
             'rrule' => (string) $this->rrule,
             'startsOn' => ($this->starts_on ?? $template->valid_from)?->toDateString(),
-            'ownTimes' => $this->hasOwnTimes(),
-            'startTime' => $this->hasOwnTimes() ? substr($this->start_time, 0, 5) : null,
-            'endTime' => $this->hasOwnTimes() ? substr($this->end_time, 0, 5) : null,
+            'id' => $this->id,
+            'startTime' => substr($this->startTime($template), 0, 5),
+            'endTime' => substr($this->endTime($template), 0, 5),
+            'employees' => $this->relationLoaded('employees') ? $this->employees->pluck('id')->map(fn ($id) => (int) $id)->values()->all() : [],
         ];
     }
 

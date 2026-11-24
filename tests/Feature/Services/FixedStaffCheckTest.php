@@ -36,7 +36,8 @@ class FixedStaffCheckTest extends TestCase
 
     private function check(Employee ...$employees): array
     {
-        return app(FixedStaffCheck::class)->forTemplate($this->template, collect($employees)->pluck('id'), $this->template->id);
+        // Eén patroon: de uitkomst van het eerste (en enige) patroon.
+        return app(FixedStaffCheck::class)->forTemplate($this->template, collect($employees)->pluck('id'), $this->template->id)[0];
     }
 
     public function test_free_employee_can_do_all_shifts(): void
@@ -106,7 +107,7 @@ class FixedStaffCheckTest extends TestCase
     public function test_own_shifts_of_the_task_do_not_count_as_overlap(): void
     {
         $employee = Employee::factory()->create();
-        $this->template->employees()->attach($employee);
+        $this->assignFixed($this->template, $employee);
         app(ShiftGenerator::class)->generateAhead(collect([$this->template]));
         $this->assertGreaterThan(0, $employee->assignments()->count());
 
@@ -135,9 +136,9 @@ class FixedStaffCheckTest extends TestCase
     public function test_generator_leaves_the_slot_open_instead_of_double_booking(): void
     {
         $employee = Employee::factory()->create();
-        $this->template->employees()->attach($employee);
+        $this->assignFixed($this->template, $employee);
         $clash = TaskTemplate::factory()->weekly([1])->create(['start_time' => '10:00', 'end_time' => '12:00', 'name' => 'Andere taak']);
-        $clash->employees()->attach($employee);
+        $this->assignFixed($clash, $employee);
 
         app(ShiftGenerator::class)->generate(now()->startOfDay(), now()->addDays(6));
 
@@ -158,22 +159,26 @@ class FixedStaffCheckTest extends TestCase
 
         $data = $this->postJson('/api/staffing/check', [
             'building_id' => $building->id,
-            'start_time' => '09:00',
-            'end_time' => '10:00',
             'valid_from' => '2026-10-12',
             'skip_holidays' => true,
-            'patterns' => [['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => [2, 4]]],
+            'patterns' => [
+                ['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => [2, 4], 'start_time' => '09:00', 'end_time' => '10:00'],
+                ['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => [1], 'start_time' => '16:00', 'end_time' => '17:00'],
+            ],
         ])->assertOk()->json();
 
-        $this->assertSame(8, $data['total']);
-        $this->assertSame('warning', $data['employees'][$student->id]['status']);
-        $this->assertSame(4, $data['employees'][$student->id]['possible']);
-        $this->assertSame('ok', $data['employees'][$free->id]['status']);
+        // Per patroon: op di/do kan de student alleen op donderdag, op maandagmiddag wel.
+        $this->assertSame(8, $data['patterns'][0]['total']);
+        $this->assertSame('warning', $data['patterns'][0]['employees'][$student->id]['status']);
+        $this->assertSame(4, $data['patterns'][0]['employees'][$student->id]['possible']);
+        $this->assertSame('ok', $data['patterns'][0]['employees'][$free->id]['status']);
+        $this->assertSame(5, $data['patterns'][1]['total']);
+        $this->assertSame('ok', $data['patterns'][1]['employees'][$student->id]['status']);
 
-        // Zonder patronen: de bestaande taken van het pand (bezettingstabel).
+        // Zonder patronen: de bestaande taken van het pand (bezettingstabel), per patroon.
         $template = TaskTemplate::factory()->weekly([2])->create(['building_id' => $building->id, 'start_time' => '09:00', 'end_time' => '10:00']);
         $matrix = $this->postJson('/api/staffing/check', ['building_id' => $building->id])->assertOk()->json();
-        $this->assertSame('blocked', $matrix['templates'][$template->id][$student->id]['status']);
+        $this->assertSame('blocked', $matrix['patterns'][$template->patterns->first()->id][$student->id]['status']);
     }
 
     public function test_saving_fixed_staff_with_a_problem_asks_for_confirmation(): void
@@ -184,25 +189,24 @@ class FixedStaffCheckTest extends TestCase
         $student->availabilityPatterns()->create(['weekday' => 1, 'type' => 'unavailable', 'start_time' => '08:00', 'end_time' => '15:00', 'note' => 'School']);
 
         // Bezettingstabel op de pandpagina
-        $payload = ['fixed' => [$this->template->id => [$student->id]], 'staff' => [$this->template->id => 1]];
+        $payload = ['fixed' => [$this->template->patterns->first()->id => [$student->id]], 'staff' => [$this->template->id => 1]];
         $this->put(route('buildings.staffing', $building), $payload)
             ->assertRedirect(route('buildings.show', $building).'#bezetting')
             ->assertSessionHasErrors('staffing');
-        $this->assertSame(0, $this->template->employees()->count());
+        $this->assertSame([], $this->fixedIds($this->template));
 
         $this->put(route('buildings.staffing', $building), $payload + ['confirm_staffing' => 1])
             ->assertRedirect(route('buildings.show', $building))
             ->assertSessionHas('status', fn ($message) => str_contains($message, 'Student staat op 8 van de 13 diensten'));
-        $this->assertSame([$student->id], $this->template->employees()->pluck('employees.id')->all());
+        $this->assertSame([$student->id], $this->fixedIds($this->template));
         // Op de vijf maandagen is de student niet ingepland: die plekken staan open.
         $this->assertSame(5, Shift::where('task_template_id', $this->template->id)->get()->sum(fn (Shift $s) => $s->openSlots()));
 
         // Taakformulier
         $form = [
-            'name' => 'Nieuwe taak', 'start_time' => '09:00', 'end_time' => '10:00', 'required_staff' => 1,
+            'name' => 'Nieuwe taak', 'required_staff' => 1,
             'valid_from' => '2026-10-12', 'skip_holidays' => '1', 'active' => '1',
-            'patterns' => [['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => [1]]],
-            'employees' => [$student->id],
+            'patterns' => [['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => [1], 'start_time' => '09:00', 'end_time' => '10:00', 'employees' => [$student->id]]],
         ];
         $this->post(route('buildings.templates.store', $building), $form)->assertSessionHasErrors('staffing');
         $this->assertSame(0, TaskTemplate::where('name', 'Nieuwe taak')->count());
@@ -216,7 +220,7 @@ class FixedStaffCheckTest extends TestCase
     {
         $this->actingAs(User::factory()->create());
         $employee = Employee::factory()->create(['name' => 'Henk']);
-        $this->template->employees()->attach($employee);
+        $this->assignFixed($this->template, $employee);
         Absence::factory()->create(['employee_id' => $employee->id, 'type' => 'ziek', 'starts_at' => '2026-10-12 00:00', 'ends_at' => '2026-10-12 23:59']);
         app(ShiftGenerator::class)->generate(now()->startOfDay(), now()->startOfDay());
         $shift = Shift::where('task_template_id', $this->template->id)->firstOrFail();

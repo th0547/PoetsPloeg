@@ -9,6 +9,7 @@
 
 import axios from 'axios';
 import { addDays, daysBetween, daysInMonth, firstOfMonth, formatDate, isoDate, isoWeekday, mondayOf, monthCells, parseDate } from './dates';
+import { patternStaffing } from './staffing';
 
 const WEEKDAYS = { 1: 'maandag', 2: 'dinsdag', 3: 'woensdag', 4: 'donderdag', 5: 'vrijdag', 6: 'zaterdag', 7: 'zondag' };
 const NTH = { 1: 'eerste', 2: 'tweede', 3: 'derde', 4: 'vierde', '-1': 'laatste' };
@@ -94,25 +95,27 @@ function makePattern(p = {}, defaults = {}) {
         dayOfMonth: Number(p.dayOfMonth) || 1,
         rrule: typeof p.rrule === 'string' ? p.rrule : '',
         startsOn: p.startsOn || defaults.startsOn || isoDate(new Date()),
-        ownTimes: !!p.ownTimes,
-        startTime: p.startTime || defaults.startTime || '18:00',
-        endTime: p.endTime || defaults.endTime || '20:00',
+        id: p.id ?? null,
+        startTime: p.startTime || '18:00',
+        endTime: p.endTime || '20:00',
+        employees: (p.employees || []).map(Number),
     };
 }
 
 export default function recurrenceEditor(initial = {}) {
     const validFrom = initial.validFrom || isoDate(new Date());
-    const defaults = { startsOn: validFrom, startTime: initial.startTime, endTime: initial.endTime };
+    const defaults = { startsOn: validFrom };
     const patterns = (initial.patterns && initial.patterns.length ? initial.patterns : [{}]).map((p) => makePattern(p, defaults));
 
     return {
+        // Vaste bezetting per patroon (staffing.js): staffResults, staffCandidates(), addStaff(), …
+        ...patternStaffing(initial.staff),
         patterns,
         validFrom,
         validUntil: initial.validUntil || '',
+        requiredStaff: Number(initial.requiredStaff) || 1,
         skipHolidays: !!initial.skipHolidays,
         holidays: initial.holidays || {},
-        taskStart: initial.startTime || '18:00',
-        taskEnd: initial.endTime || '20:00',
         previewUrl: initial.previewUrl,
         previewOffset: 0,
         maxPatterns: MAX_PATTERNS,
@@ -121,6 +124,7 @@ export default function recurrenceEditor(initial = {}) {
         timers: {},
 
         init() {
+            this.initStaffing();
             this.patterns.filter((p) => p.mode === 'code').forEach((p) => this.refreshCode(p, 0));
             this.$watch('previewOffset', () => this.patterns.filter((p) => p.mode === 'code').forEach((p) => this.refreshCode(p, 0)));
             // Patronen die gewoon vanaf "Vanaf" tellen, schuiven mee als Vanaf verandert.
@@ -134,12 +138,6 @@ export default function recurrenceEditor(initial = {}) {
             });
         },
 
-        /** De tijden in het blok "Taak" staan buiten dit onderdeel; luister mee (op window). */
-        syncTaskTimes(event) {
-            if (event.target?.id === 'start_time') this.taskStart = event.target.value;
-            if (event.target?.id === 'end_time') this.taskEnd = event.target.value;
-        },
-
         // --- Patronen beheren ---
 
         color(i) {
@@ -149,15 +147,23 @@ export default function recurrenceEditor(initial = {}) {
         addPattern() {
             if (this.patterns.length >= MAX_PATTERNS) return;
             const last = this.patterns[this.patterns.length - 1];
-            const next = last
-                ? {
-                    // Kopie van het laatste patroon, een week later: handig voor "de ene week dit, de andere week dat".
+            let next = makePattern({}, defaults);
+            if (last) {
+                // Kopie van het laatste patroon (zelfde tijden, nog zonder vaste krachten). Wekelijks: de werkdagen
+                // die nog geen patroon hebben ("om de dag": ma, wo, vr en dan di, do). Om de week of minder vaak:
+                // een week later, voor "de ene week dit, de andere week dat".
+                const used = new Set(this.patterns.filter((p) => p.mode === 'weekly').flatMap((p) => p.weekdays));
+                const rest = [1, 2, 3, 4, 5].filter((d) => !used.has(d));
+                const alternate = last.mode !== 'weekly' || last.every > 1 || !rest.length;
+                next = {
                     ...JSON.parse(JSON.stringify(last)),
                     uid: ++uid,
-                    startsOn: isoDate(addDays(parseDate(last.startsOn || this.validFrom), 7)),
-                    ownTimes: false,
-                }
-                : makePattern({}, defaults);
+                    id: null,
+                    employees: [],
+                    weekdays: last.mode === 'weekly' && last.every === 1 && rest.length ? rest : [...last.weekdays],
+                    startsOn: alternate ? isoDate(addDays(parseDate(last.startsOn || this.validFrom), 7)) : last.startsOn,
+                };
+            }
             this.patterns.push(next);
             if (next.mode === 'code') this.refreshCode(next, 0);
         },
@@ -318,7 +324,7 @@ export default function recurrenceEditor(initial = {}) {
         },
 
         timesOf(p) {
-            return p.ownTimes ? `${p.startTime}–${p.endTime}` : `${this.taskStart}–${this.taskEnd}`;
+            return `${p.startTime || '?'}–${p.endTime || '?'}`;
         },
 
         // --- Samenvattingen ---

@@ -36,7 +36,9 @@ class TaskTemplateController extends Controller
             'skip_holidays' => true,
             'active' => true,
         ]);
-        $template->setRelation('patterns', collect([new TaskTemplatePattern(['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => [1, 2, 3, 4, 5]])]));
+        $pattern = new TaskTemplatePattern(['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => [1, 2, 3, 4, 5], 'start_time' => '18:00', 'end_time' => '20:00']);
+        $pattern->setRelation('employees', collect());
+        $template->setRelation('patterns', collect([$pattern]));
 
         return $this->form($building, $template);
     }
@@ -76,8 +78,10 @@ class TaskTemplateController extends Controller
 
     private function form(Building $building, TaskTemplate $template): View
     {
-        $template->loadMissing(['skills', 'employees', 'patterns']);
+        $template->loadMissing(['skills', 'patterns.employees']);
         $hasOld = session()->hasOldInput();
+        $staffIds = $template->staff()->pluck('id');
+        $knownIds = $building->employees()->pluck('employees.id')->all();
 
         return view('templates.form', [
             'building' => $building,
@@ -90,8 +94,7 @@ class TaskTemplateController extends Controller
                     : $template->patterns->map(fn (TaskTemplatePattern $p) => $p->toEditor($template))->values()->all(),
                 'validFrom' => old('valid_from', $template->valid_from?->toDateString()),
                 'validUntil' => old('valid_until', $template->valid_until?->toDateString()),
-                'startTime' => old('start_time', substr((string) $template->start_time, 0, 5)),
-                'endTime' => old('end_time', substr((string) $template->end_time, 0, 5)),
+                'requiredStaff' => (int) old('required_staff', $template->required_staff ?: 1),
                 'skipHolidays' => $hasOld ? (bool) old('skip_holidays') : (bool) $template->skip_holidays,
                 // Feestdagen waarop niet wordt ingepland, voor de voorbeeldkalender.
                 'holidays' => collect($this->holidays->between(today()->startOfYear(), today()->addYears(3)->endOfYear()))
@@ -99,11 +102,19 @@ class TaskTemplateController extends Controller
                     ->all(),
                 'previewUrl' => route('api.recurrence.preview'),
                 'helpUrl' => route('help.recurrence'),
+                // Vaste bezetting per patroon: wie er te kiezen is en de controle (resources/js/staffing.js).
+                'staff' => [
+                    'url' => route('api.staffing.check'),
+                    'buildingId' => $building->id,
+                    'templateId' => $template->exists ? $template->id : null,
+                    'serverWarned' => session('errors')?->has('staffing') ?? false,
+                    'employees' => Employee::where(fn ($q) => $q->where('active', true)->orWhereIn('id', $staffIds))
+                        ->orderBy('name')->get(['id', 'name', 'color'])
+                        ->map(fn (Employee $e) => ['id' => $e->id, 'name' => $e->name, 'color' => $e->color, 'known' => in_array($e->id, $knownIds, true)])
+                        ->values()->all(),
+                ],
             ],
             'skills' => Skill::orderBy('name')->get(),
-            'employees' => Employee::where(fn ($q) => $q->where('active', true)->orWhereIn('id', $template->employees->pluck('id')))
-                ->orderBy('name')->get(),
-            'knownIds' => $building->employees()->pluck('employees.id')->all(),
         ]);
     }
 
@@ -141,7 +152,7 @@ class TaskTemplateController extends Controller
     /** Aanvulling op de melding na opslaan: wat betekent de vaste bezetting voor de diensten? */
     private function staffingNote(): string
     {
-        $problems = collect($this->staffing)->filter(fn ($r) => $r['status'] !== FixedStaffCheck::OK && $r['possible'] < $r['total']);
+        $problems = collect(FixedStaffCheck::flatten($this->staffing))->filter(fn ($r) => $r['status'] !== FixedStaffCheck::OK && $r['possible'] < $r['total']);
         if ($problems->isEmpty()) {
             return '';
         }
@@ -163,9 +174,10 @@ class TaskTemplateController extends Controller
             // Ruwe invoer (kan na een fout ongeldig zijn); veilig omdat het via @js() als JSON-string gaat.
             'rrule' => is_string($p['rrule'] ?? null) ? mb_substr($p['rrule'], 0, 300) : '',
             'startsOn' => is_string($p['starts_on'] ?? null) ? $p['starts_on'] : null,
-            'ownTimes' => filter_var($p['own_times'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'id' => is_numeric($p['id'] ?? null) ? (int) $p['id'] : null,
             'startTime' => is_string($p['start_time'] ?? null) ? $p['start_time'] : null,
             'endTime' => is_string($p['end_time'] ?? null) ? $p['end_time'] : null,
+            'employees' => collect((array) ($p['employees'] ?? []))->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->values()->all(),
         ])->values()->all();
     }
 
@@ -174,56 +186,58 @@ class TaskTemplateController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
-            'start_time' => ['required', 'date_format:H:i'],
-            'end_time' => ['required', 'date_format:H:i', 'different:start_time'],
             'required_staff' => ['required', 'integer', 'min:1', 'max:50'],
             ...TaskTemplatePattern::rules(),
             'valid_from' => ['required', 'date'],
             'valid_until' => ['nullable', 'date', 'after_or_equal:valid_from'],
             'skills' => ['array'],
             'skills.*' => ['exists:skills,id'],
-            'employees' => ['array'],
-            'employees.*' => ['exists:employees,id'],
-        ], [
-            'patterns.required' => 'Voeg minimaal één patroon toe.',
-            'patterns.max' => 'Een taak kan hoogstens '.TaskTemplatePattern::MAX_PER_TEMPLATE.' patronen hebben.',
-            'patterns.*.weekdays.required_if' => 'Kies minimaal één weekdag.',
-            'patterns.*.rrule.required_if' => 'Vul een code in.',
-            'patterns.*.start_time.required_if_accepted' => 'Vul een begintijd in.',
-            'patterns.*.end_time.required_if_accepted' => 'Vul een eindtijd in.',
-        ], [
+        ], TaskTemplatePattern::messages(), [
             'patterns.*.rrule' => 'code',
             'patterns.*.starts_on' => 'telt vanaf',
+            'patterns.*.start_time' => 'begintijd',
+            'patterns.*.end_time' => 'eindtijd',
         ]);
+        $patterns = array_values($data['patterns']);
+        $staff = array_map(fn (array $p) => TaskTemplatePattern::employeeIdsFromInput($p), $patterns);
 
-        // Vaste krachten die (een deel van) de diensten niet kunnen draaien: eerst waarschuwen.
-        $this->staffing = $this->staffCheck->forTemplate(
-            FixedStaffCheck::draft($building, ['skip_holidays' => $request->boolean('skip_holidays')] + $data),
-            $data['employees'] ?? [],
-            $template->exists ? $template->id : null,
+        // Vaste krachten die (een deel van) de diensten van hun patroon niet kunnen draaien: eerst waarschuwen.
+        $draft = FixedStaffCheck::draft($building, ['skip_holidays' => $request->boolean('skip_holidays')] + $data);
+        $this->staffing = FixedStaffCheck::selected(
+            $this->staffCheck->forTemplate($draft, collect($staff)->flatten()->unique(), $template->exists ? $template->id : null),
+            $staff,
         );
-        if (FixedStaffCheck::needsConfirmation($this->staffing) && ! $request->boolean('confirm_staffing')) {
-            throw ValidationException::withMessages(['staffing' => FixedStaffCheck::messages($this->staffing)]);
+        if (FixedStaffCheck::needsConfirmation(FixedStaffCheck::flatten($this->staffing)) && ! $request->boolean('confirm_staffing')) {
+            throw ValidationException::withMessages(['staffing' => FixedStaffCheck::patternMessages($draft, $this->staffing)]);
         }
 
-        $template->fill(collect($data)->except(['skills', 'employees', 'patterns'])->all());
+        $template->fill(collect($data)->except(['skills', 'patterns'])->all());
+        $template->start_time = $patterns[0]['start_time'];
+        $template->end_time = $patterns[0]['end_time'];
         $template->skip_holidays = $request->boolean('skip_holidays');
         $template->active = $request->boolean('active');
         $template->building()->associate($building);
         $template->save();
 
-        // Patronen vervangen. Diensten houden hun patroon-id tot regenerateTemplate() de toekomstige
-        // opnieuw opbouwt; bij verwijderde patronen wordt dat id leeg (nullOnDelete).
-        $template->patterns()->delete();
-        foreach (array_values($data['patterns']) as $i => $pattern) {
-            $template->patterns()->create(TaskTemplatePattern::attributesFromInput($pattern, $i));
+        // Patronen bijwerken. Een bestaand patroon houdt zijn id, zodat diensten (ook handmatig aangepaste)
+        // en de vaste bezetting eraan gekoppeld blijven. Verwijderde patronen: het patroon-id van hun diensten
+        // wordt leeg (nullOnDelete).
+        $existing = $template->patterns()->get()->keyBy('id');
+        $kept = [];
+        foreach ($patterns as $i => $input) {
+            $attributes = TaskTemplatePattern::attributesFromInput($input, $i);
+            $pattern = isset($input['id']) && $existing->has((int) $input['id'])
+                ? tap($existing[(int) $input['id']])->update($attributes)
+                : $template->patterns()->create($attributes);
+            $pattern->employees()->sync(collect($staff[$i])->mapWithKeys(fn ($id, $position) => [$id => ['position' => $position]])->all());
+            $kept[] = $pattern->id;
         }
+        $template->patterns()->whereNotIn('id', $kept)->delete();
         $template->unsetRelation('patterns');
 
         $template->skills()->sync($data['skills'] ?? []);
-        $template->employees()->sync(
-            collect($data['employees'] ?? [])->values()->mapWithKeys(fn ($id, $i) => [$id => ['position' => $i]])->all()
-        );
+        // Wie vast op een taak staat, kent het pand (zoals bij de bezettingstabel; issue #70).
+        $building->employees()->syncWithoutDetaching(collect($staff)->flatten()->unique()->values()->all());
 
         return $template;
     }

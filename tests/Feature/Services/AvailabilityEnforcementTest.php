@@ -27,7 +27,7 @@ class AvailabilityEnforcementTest extends TestCase
         $template = TaskTemplate::factory()->weekly([1, 3])->create(['start_time' => '09:00', 'end_time' => '11:00', 'valid_from' => '2026-10-01']);
         $student = Employee::factory()->create();
         $student->availabilityPatterns()->create(['weekday' => 1, 'type' => 'unavailable', 'start_time' => '08:00', 'end_time' => '15:00', 'note' => 'School']);
-        $template->employees()->attach($student);
+        $this->assignFixed($template, $student);
 
         app(ShiftGenerator::class)->generate(CarbonImmutable::parse('2026-10-19'), CarbonImmutable::parse('2026-10-21'));
 

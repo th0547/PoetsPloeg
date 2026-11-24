@@ -9,7 +9,7 @@ import policyForm from './policy';
 import recurrenceEditor, { aiPrompt, recurrencePlayground } from './recurrence';
 import replaceCard from './replace-card';
 import shiftPanel, { openShift } from './shift-panel';
-import staffPicker, { staffingTable } from './staffing';
+import { staffingTable } from './staffing';
 import palette from './ui/palette';
 
 window.Alpine = Alpine;
@@ -33,7 +33,6 @@ Alpine.data('shiftPanel', shiftPanel);
 Alpine.data('employeePanel', employeePanel);
 Alpine.data('palette', palette);
 Alpine.data('replaceCard', replaceCard);
-Alpine.data('staffPicker', staffPicker);
 Alpine.data('staffingTable', staffingTable);
 Alpine.data('availabilityEditor', availabilityEditor);
 Alpine.data('absenceForm', absenceForm);

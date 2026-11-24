@@ -47,7 +47,8 @@ class ShiftGenerator
         if ($templates->isEmpty()) {
             return 0;
         }
-        $templates->load(['patterns', 'skills:id', 'employees' => fn ($q) => $q->where('active', true)->with(['availabilityPatterns', 'availabilityDays'])]);
+        $templates->load(['patterns.employees' => fn ($q) => $q->where('active', true)->with(['availabilityPatterns', 'availabilityDays']), 'skills:id']);
+        $staffIds = $templates->flatMap->patterns->flatMap->employees->pluck('id')->unique()->values();
 
         // Wat er al staat: per patroon per dag, en per taak per dag en begintijd (twee patronen op
         // dezelfde dag en tijd geven één dienst). Geannuleerde diensten tellen mee: die blijven weg.
@@ -70,7 +71,7 @@ class ShiftGenerator
             });
 
         $absences = Absence::query()->effective()
-            ->whereIn('employee_id', $templates->flatMap->employees->pluck('id')->unique())
+            ->whereIn('employee_id', $staffIds)
             ->where('starts_at', '<', $to->addDays(2))
             ->where('ends_at', '>', $from)
             ->get()
@@ -81,7 +82,7 @@ class ShiftGenerator
         $this->busy = [];
         DB::table('shift_assignments')
             ->join('shifts', 'shifts.id', '=', 'shift_assignments.shift_id')
-            ->whereIn('shift_assignments.employee_id', $templates->flatMap->employees->pluck('id')->unique())
+            ->whereIn('shift_assignments.employee_id', $staffIds)
             ->whereNull('shifts.cancelled_at')
             ->where('shifts.starts_at', '<', $to->addDays(2))
             ->where('shifts.ends_at', '>', $from)
@@ -177,10 +178,10 @@ class ShiftGenerator
             $shift->skills()->attach($template->skills->pluck('id'));
         }
 
-        // Vaste bezetting invullen, behalve wie op dat moment afwezig is, volgens het weekpatroon niet kan
-        // of al op een andere dienst staat. De plek blijft dan open (zie FixedStaffCheck voor de waarschuwing vooraf).
+        // Vaste bezetting van dit patroon invullen, behalve wie op dat moment afwezig is, volgens het weekpatroon
+        // niet kan of al op een andere dienst staat. De plek blijft dan open (zie FixedStaffCheck voor de waarschuwing vooraf).
         $assigned = 0;
-        foreach ($template->employees as $employee) {
+        foreach ($pattern->employees as $employee) {
             if ($assigned >= $template->required_staff) {
                 break;
             }

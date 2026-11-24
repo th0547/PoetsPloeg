@@ -18,7 +18,7 @@
     {{-- Nieuw pand: wat moet er nog gebeuren voordat de diensten vanzelf in de planning staan? --}}
     @php
         $hasTasks = $building->taskTemplates->isNotEmpty();
-        $hasStaff = $building->taskTemplates->contains(fn ($t) => $t->employees->isNotEmpty());
+        $hasStaff = $building->taskTemplates->contains(fn ($t) => $t->staff()->isNotEmpty());
     @endphp
     @unless ($hasTasks && $hasStaff)
         <ol class="card mb-6 grid gap-px overflow-hidden bg-gray-200 sm:grid-cols-3">
@@ -62,20 +62,21 @@
                                 <div>
                                     <a href="{{ route('buildings.templates.edit', [$building, $template]) }}" class="font-medium text-gray-900 hover:text-teal-700">{{ $template->name }}</a>
                                     @unless ($template->active) <span class="chip">inactief</span> @endunless
-                                    <p class="text-sm text-gray-600">
-                                        {{ $template->recurrenceLabel() }},
-                                        {{ substr($template->start_time, 0, 5) }}–{{ substr($template->end_time, 0, 5) }}@if ($template->patterns->contains(fn ($p) => $p->hasOwnTimes())) (standaard)@endif
-                                        · {{ $template->required_staff }} {{ $template->required_staff === 1 ? 'persoon' : 'personen' }}
-                                    </p>
+                                    <p class="text-sm text-gray-600">{{ $template->required_staff }} {{ $template->required_staff === 1 ? 'persoon' : 'personen' }} per dienst</p>
                                     <div class="mt-1 flex flex-wrap gap-1">
                                         @foreach ($template->skills as $skill)<span class="chip">{{ $skill->name }}</span>@endforeach
                                     </div>
                                 </div>
-                                <div class="text-right text-xs text-gray-500">
-                                    <p>Vaste bezetting:</p>
-                                    <p class="text-sm text-gray-800">{{ $template->employees->pluck('name')->implode(', ') ?: '—' }}</p>
-                                </div>
                             </div>
+                            {{-- Per patroon: wanneer en wie er vast op staat. --}}
+                            <ul class="mt-1.5 space-y-0.5 text-sm">
+                                @foreach ($template->patterns as $pattern)
+                                    <li class="flex flex-wrap items-baseline justify-between gap-x-3">
+                                        <span class="text-gray-700">{{ $pattern->label() }} <span class="text-gray-500">{{ $pattern->timesLabel($template) }}</span></span>
+                                        <span class="text-gray-800">{{ $pattern->employees->pluck('name')->implode(', ') ?: '—' }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
                         </li>
                     @empty
                         <li class="px-4 py-6 text-center text-sm text-gray-500">
@@ -202,7 +203,7 @@
         @php
             $hasOld = session()->hasOldInput('fixed') || session()->hasOldInput('staff');
             $showAllStaff = $hasOld || empty($knownIds)
-                || $staffEmployees->contains(fn ($e) => ! in_array($e->id, $knownIds) && $building->taskTemplates->flatMap->employees->contains('id', $e->id));
+                || $staffEmployees->contains(fn ($e) => ! in_array($e->id, $knownIds) && $building->taskTemplates->flatMap->staff()->contains('id', $e->id));
         @endphp
         <section class="card mt-6" id="bezetting"
                  x-data="staffingTable(@js(['url' => route('api.staffing.check'), 'buildingId' => $building->id, 'showAll' => $showAllStaff]))">
@@ -211,7 +212,7 @@
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
                     <div>
                         <h2 class="font-semibold text-gray-800">Vaste bezetting</h2>
-                        <p class="text-xs text-gray-500">Vink per taak aan wie er vast op staat. Het bolletje laat zien of iemand de diensten van de komende {{ config('poetsploeg.generate_weeks_ahead') }} weken kan draaien:
+                        <p class="text-xs text-gray-500">Vink per taak (of per patroon) aan wie er vast op staat. Het bolletje laat zien of iemand de diensten van de komende {{ config('poetsploeg.generate_weeks_ahead') }} weken kan draaien:
                             <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>kan alles</span>,
                             <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-amber-500"></span>deels of let op</span>,
                             <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-red-500"></span>kan niet</span>. Houd de muis erboven voor de reden.</p>
@@ -253,38 +254,60 @@
                                 @endforeach
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            @foreach ($building->taskTemplates as $template)
-                                @php($fixedIds = $hasOld ? array_map('intval', (array) old('fixed.'.$template->id, [])) : $template->employees->pluck('id')->all())
-                                <tr x-data="{ staff: {{ (int) old('staff.'.$template->id, $template->required_staff) }}, checked: {{ count($fixedIds) }} }" class="{{ $template->active ? '' : 'opacity-60' }}">
-                                    <td class="sticky left-0 z-10 w-40 min-w-[9rem] bg-white px-3 py-2 align-top sm:w-auto sm:min-w-[14rem]">
-                                        <div class="font-medium text-gray-900">{{ $template->name }}</div>
-                                        <div class="text-xs text-gray-500">{{ $template->timesLabel() }} · {{ $template->recurrenceLabel() }}</div>
-                                        <p x-show="checked > staff" x-cloak class="mt-1 text-xs text-amber-700">
-                                            Meer vinkjes dan personen: alleen de eerste <span x-text="staff"></span> worden ingepland.
-                                            <button type="button" class="underline" @click="staff = checked">Aantal = <span x-text="checked"></span></button>
-                                        </p>
-                                    </td>
-                                    <td class="px-2 py-2 align-top">
-                                        <input type="number" min="1" max="50" name="staff[{{ $template->id }}]" x-model.number="staff"
-                                               class="w-16 rounded-md border-gray-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500" aria-label="Aantal personen {{ $template->name }}">
-                                    </td>
-                                    @foreach ($staffEmployees as $employee)
-                                        <td class="px-2 py-2 text-center align-top" @unless (in_array($employee->id, $knownIds)) x-show="showAll" @endunless
-                                            :title="title({{ $template->id }}, {{ $employee->id }})">
-                                            <span class="inline-flex flex-col items-center gap-1">
-                                                <input type="checkbox" name="fixed[{{ $template->id }}][]" value="{{ $employee->id }}" class="checkbox h-5 w-5"
-                                                       aria-label="{{ $employee->name }} op {{ $template->name }}"
-                                                       data-template="{{ $template->id }}" data-task="{{ $template->name }}"
-                                                       @checked(in_array($employee->id, $fixedIds))
-                                                       @change="checked += $event.target.checked ? 1 : -1">
-                                                <span class="h-2 w-2 rounded-full" :class="dot({{ $template->id }}, {{ $employee->id }})"></span>
-                                            </span>
+                        @foreach ($building->taskTemplates as $template)
+                            @php($multi = $template->patterns->count() > 1)
+                            {{-- Eén tbody per taak: het aantal personen geldt voor alle patronen van de taak. --}}
+                            <tbody class="border-t border-gray-200 {{ $template->active ? '' : 'opacity-60' }}" x-data="{ staff: {{ (int) old('staff.'.$template->id, $template->required_staff) }} }">
+                                @if ($multi)
+                                    <tr>
+                                        <td class="sticky left-0 z-10 w-40 min-w-[9rem] bg-white px-3 pt-2 align-top sm:w-auto sm:min-w-[14rem]">
+                                            <div class="font-medium text-gray-900">{{ $template->name }}</div>
+                                            <div class="text-xs text-gray-500">{{ $template->patterns->count() }} patronen, elk met eigen bezetting</div>
                                         </td>
-                                    @endforeach
-                                </tr>
-                            @endforeach
-                        </tbody>
+                                        <td class="px-2 pt-2 align-top">
+                                            <input type="number" min="1" max="50" name="staff[{{ $template->id }}]" x-model.number="staff"
+                                                   class="w-16 rounded-md border-gray-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500" aria-label="Aantal personen {{ $template->name }}">
+                                        </td>
+                                        @foreach ($staffEmployees as $employee)
+                                            <td @unless (in_array($employee->id, $knownIds)) x-show="showAll" @endunless></td>
+                                        @endforeach
+                                    </tr>
+                                @endif
+                                @foreach ($template->patterns as $pattern)
+                                    @php($fixedIds = $hasOld ? array_map('intval', (array) old('fixed.'.$pattern->id, [])) : $pattern->employees->pluck('id')->all())
+                                    @php($rowLabel = $multi ? $template->name.' ('.$pattern->label().' '.$pattern->timesLabel($template).')' : $template->name)
+                                    <tr x-data="{ checked: {{ count($fixedIds) }} }">
+                                        <td class="sticky left-0 z-10 w-40 min-w-[9rem] bg-white px-3 py-2 align-top sm:w-auto sm:min-w-[14rem] {{ $multi ? 'ps-6' : '' }}">
+                                            @unless ($multi)<div class="font-medium text-gray-900">{{ $template->name }}</div>@endunless
+                                            <div class="text-xs {{ $multi ? 'text-gray-700' : 'text-gray-500' }}">{{ $pattern->label() }} · {{ $pattern->timesLabel($template) }}</div>
+                                            <p x-show="checked > staff" x-cloak class="mt-1 text-xs text-amber-700">
+                                                Meer vinkjes dan personen: wie verder in de rij staat, wordt alleen ingepland als iemand ervoor niet kan.
+                                                <button type="button" class="underline" @click="staff = checked">Aantal = <span x-text="checked"></span></button>
+                                            </p>
+                                        </td>
+                                        <td class="px-2 py-2 align-top">
+                                            @unless ($multi)
+                                                <input type="number" min="1" max="50" name="staff[{{ $template->id }}]" x-model.number="staff"
+                                                       class="w-16 rounded-md border-gray-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500" aria-label="Aantal personen {{ $template->name }}">
+                                            @endunless
+                                        </td>
+                                        @foreach ($staffEmployees as $employee)
+                                            <td class="px-2 py-2 text-center align-top" @unless (in_array($employee->id, $knownIds)) x-show="showAll" @endunless
+                                                :title="title({{ $pattern->id }}, {{ $employee->id }})">
+                                                <span class="inline-flex flex-col items-center gap-1">
+                                                    <input type="checkbox" name="fixed[{{ $pattern->id }}][]" value="{{ $employee->id }}" class="checkbox h-5 w-5"
+                                                           aria-label="{{ $employee->name }} op {{ $rowLabel }}"
+                                                           data-pattern="{{ $pattern->id }}" data-task="{{ $rowLabel }}"
+                                                           @checked(in_array($employee->id, $fixedIds))
+                                                           @change="checked += $event.target.checked ? 1 : -1">
+                                                    <span class="h-2 w-2 rounded-full" :class="dot({{ $pattern->id }}, {{ $employee->id }})"></span>
+                                                </span>
+                                            </td>
+                                        @endforeach
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        @endforeach
                     </table>
                 </div>
                 <div class="border-t px-4 py-3">

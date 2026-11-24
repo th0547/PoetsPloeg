@@ -90,14 +90,11 @@ class PagesTest extends TestCase
 
         $this->post(route('buildings.templates.store', $building), [
             'name' => 'Dagelijkse schoonmaak',
-            'start_time' => '18:00',
-            'end_time' => '20:00',
             'required_staff' => 1,
-            'patterns' => [['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => [1, 3]]],
+            'patterns' => [['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => [1, 3], 'start_time' => '18:00', 'end_time' => '20:00', 'employees' => [$employee->id]]],
             'valid_from' => '2026-10-10',
             'skip_holidays' => '1',
             'active' => '1',
-            'employees' => [$employee->id],
         ])->assertRedirect(route('buildings.show', $building))->assertSessionHasNoErrors();
 
         $this->assertSame(24, Shift::count());

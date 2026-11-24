@@ -91,13 +91,13 @@
                     <p class="text-xs text-gray-500">Hier staat {{ $employee->name }} vast op ingepland.</p>
                 </div>
                 <ul class="divide-y divide-gray-100">
-                    @forelse ($fixedTemplates as $template)
+                    @forelse ($fixedTemplates as $row)
                         <li class="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
-                            <a href="{{ route('buildings.show', $template->building) }}" class="flex min-w-0 items-center gap-2 font-medium text-gray-900 hover:text-teal-700">
-                                <span class="h-3 w-3 shrink-0 rounded" style="background: {{ $template->building->color }}"></span>
-                                <span class="truncate">{{ $template->building->name }} · {{ $template->name }}</span>
+                            <a href="{{ route('buildings.show', $row->template->building) }}" class="flex min-w-0 items-center gap-2 font-medium text-gray-900 hover:text-teal-700">
+                                <span class="h-3 w-3 shrink-0 rounded" style="background: {{ $row->template->building->color }}"></span>
+                                <span class="truncate">{{ $row->template->building->name }} · {{ $row->template->name }}</span>
                             </a>
-                            <span class="text-xs text-gray-500">{{ $template->recurrenceLabel() }}, {{ $template->timesLabel() }}</span>
+                            <span class="text-xs text-gray-500">{{ $row->label }}</span>
                         </li>
                     @empty
                         <li class="px-4 py-4 text-sm text-gray-500">Geen vaste taken. Wijs iemand toe bij een pand, onder Vaste bezetting.</li>
