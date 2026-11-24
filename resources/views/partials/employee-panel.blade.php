@@ -26,7 +26,7 @@
 
             {{-- Snel bereiken en acties --}}
             <div class="flex flex-wrap gap-2">
-                <a x-show="employee?.phone" :href="'tel:' + employee?.phone" class="btn-secondary btn-sm"><x-icon name="phone" class="icon-sm" /><span x-text="employee?.phone"></span></a>
+                <a x-show="employee?.phone" :href="$tel(employee?.phone)" class="btn-secondary btn-sm"><x-icon name="phone" class="icon-sm" /><span x-text="employee?.phone"></span></a>
                 <a x-show="employee?.email" :href="'mailto:' + employee?.email" class="btn-secondary btn-sm"><x-icon name="mail" class="icon-sm" />Mail</a>
                 <a :href="employee?.urls.absence" class="btn-secondary btn-sm"><x-icon name="user-x" class="icon-sm" />Afwezig melden</a>
             </div>

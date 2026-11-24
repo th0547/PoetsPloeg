@@ -8,6 +8,7 @@ use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Skill;
 use App\Models\VacationBalance;
+use App\Rules\PhoneNumber;
 use App\Services\Audit;
 use App\Services\AvailabilityEnforcer;
 use App\Services\ConflictChecker;
@@ -220,7 +221,7 @@ class EmployeeController extends Controller
                 $needsLogin ? Rule::unique('users', 'email')->ignore($account) : null,
             ]),
             'invite' => ['boolean'],
-            'phone' => ['nullable', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:50', new PhoneNumber],
             'color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'contract_hours_min' => ['nullable', 'numeric', 'min:0', 'max:80'],
             'contract_hours_max' => array_filter(['nullable', 'numeric', 'min:0', 'max:80', $request->filled('contract_hours_min') ? 'gte:contract_hours_min' : null]),

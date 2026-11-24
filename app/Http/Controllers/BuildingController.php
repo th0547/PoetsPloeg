@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Shift;
+use App\Rules\PhoneNumber;
 use App\Services\Audit;
 use App\Services\DutchHolidays;
 use App\Services\FixedStaffCheck;
@@ -211,7 +212,7 @@ class BuildingController extends Controller
             'postal_code' => ['nullable', 'string', 'max:10'],
             'city' => ['nullable', 'string', 'max:255'],
             'contact_name' => ['nullable', 'string', 'max:255'],
-            'contact_phone' => ['nullable', 'string', 'max:50'],
+            'contact_phone' => ['nullable', 'string', 'max:50', new PhoneNumber],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'access_instructions' => ['nullable', 'string', 'max:5000'],
             'notes' => ['nullable', 'string', 'max:5000'],

@@ -109,7 +109,7 @@
         <aside class="space-y-6">
             <section class="card card-body space-y-3">
                 <h2 class="card-title">Contact</h2>
-                @if ($o['phone'])<a href="tel:{{ $o['phone'] }}" class="flex items-center gap-2 text-sm text-teal-700 hover:underline"><x-icon name="phone" />{{ $o['phone'] }}</a>@endif
+                @if (\App\Support\Phone::href($o['phone']))<a href="{{ \App\Support\Phone::href($o['phone']) }}" class="flex items-center gap-2 text-sm text-teal-700 hover:underline"><x-icon name="phone" />{{ $o['phone'] }}</a>@elseif ($o['phone'])<p class="flex items-center gap-2 text-sm text-gray-700"><x-icon name="phone" />{{ $o['phone'] }}</p>@endif
                 @if ($o['email'])<a href="mailto:{{ $o['email'] }}" class="flex items-center gap-2 break-all text-sm text-teal-700 hover:underline"><x-icon name="mail" />{{ $o['email'] }}</a>@endif
                 @if (! $o['phone'] && ! $o['email'])<p class="text-sm text-gray-500">Geen contactgegevens ingevuld.</p>@endif
                 @if ($o['notes'])<p class="whitespace-pre-line border-t border-gray-100 pt-3 text-sm text-gray-600">{{ $o['notes'] }}</p>@endif

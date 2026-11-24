@@ -93,7 +93,7 @@
                 <h2 class="font-semibold text-gray-800">Pandinfo</h2>
                 @if ($building->contact_name || $building->contact_phone || $building->contact_email)
                     <p><span class="text-gray-500">Contact:</span> {{ $building->contact_name }}
-                        @if ($building->contact_phone)<a href="tel:{{ $building->contact_phone }}" class="text-teal-700 hover:underline">{{ $building->contact_phone }}</a>@endif
+                        @if (\App\Support\Phone::href($building->contact_phone))<a href="{{ \App\Support\Phone::href($building->contact_phone) }}" class="text-teal-700 hover:underline">{{ $building->contact_phone }}</a>@elseif ($building->contact_phone){{ $building->contact_phone }}@endif
                         @if ($building->contact_email)<br><a href="mailto:{{ $building->contact_email }}" class="text-teal-700 hover:underline">{{ $building->contact_email }}</a>@endif
                     </p>
                 @endif

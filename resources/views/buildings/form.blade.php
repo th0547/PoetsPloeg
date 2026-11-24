@@ -37,7 +37,7 @@
                 </div>
                 <div class="sm:col-span-2">
                     <label class="label" for="contact_phone">Telefoon contact</label>
-                    <input id="contact_phone" name="contact_phone" class="input" value="{{ old('contact_phone', $building->contact_phone) }}">
+                    <input id="contact_phone" name="contact_phone" type="tel" inputmode="tel" class="input" value="{{ old('contact_phone', $building->contact_phone) }}" placeholder="06 12345678">
                 </div>
                 <div class="sm:col-span-2">
                     <label class="label" for="contact_email">E-mail contact</label>

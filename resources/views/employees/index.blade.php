@@ -58,7 +58,7 @@
                                         @endif
                                     @endif
                                     <p class="text-xs text-gray-500">
-                                        @if ($employee->phone)<a href="tel:{{ $employee->phone }}" class="hover:text-teal-700">{{ $employee->phone }}</a>@endif
+                                        @if (\App\Support\Phone::href($employee->phone))<a href="{{ \App\Support\Phone::href($employee->phone) }}" class="hover:text-teal-700">{{ $employee->phone }}</a>@elseif ($employee->phone){{ $employee->phone }}@endif
                                         @if ($employee->phone && $employee->email) · @endif{{ $employee->email }}
                                     </p>
                                 </div>

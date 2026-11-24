@@ -42,7 +42,7 @@
                     </div>
                     <div>
                         <label class="label" for="phone">Telefoon</label>
-                        <input id="phone" name="phone" class="input" value="{{ old('phone', $employee->phone) }}">
+                        <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" class="input" value="{{ old('phone', $employee->phone) }}" placeholder="06 12345678">
                     </div>
                     <div>
                         <label class="label" for="email">E-mail</label>
