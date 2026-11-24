@@ -91,6 +91,18 @@ class BuildingPageTest extends TestCase
         $this->assertSame(1, Shift::where('task_template_id', $template->id)->whereDate('date', '2026-10-21')->first()->assignments()->count());
     }
 
+    public function test_short_name_can_be_set_in_the_form(): void
+    {
+        // Issue #74: korte naam voor de maandweergave, met de automatische afkorting als voorbeeld.
+        $building = Building::factory()->create(['name' => 'JB Ventures']);
+        $this->get(route('buildings.edit', $building))->assertOk()->assertSee('Korte naam')->assertSee('placeholder="JBV"', false);
+
+        $data = ['name' => 'JB Ventures', 'color' => '#336699', 'active' => '1'];
+        $this->put(route('buildings.update', $building), $data + ['short_name' => 'Ventures'])->assertSessionHasNoErrors();
+        $this->assertSame('Ventures', $building->fresh()->shortLabel());
+        $this->put(route('buildings.update', $building), $data + ['short_name' => 'Veel te lange naam'])->assertSessionHasErrors('short_name');
+    }
+
     public function test_staffing_rejects_template_of_other_building(): void
     {
         $building = Building::factory()->create();

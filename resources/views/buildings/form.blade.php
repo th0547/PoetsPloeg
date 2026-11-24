@@ -16,6 +16,12 @@
                     <input id="name" name="name" class="input" value="{{ old('name', $building->name) }}" required autofocus>
                 </div>
                 <div class="sm:col-span-2">
+                    <label class="label" for="short_name">Korte naam</label>
+                    <input id="short_name" name="short_name" class="input" maxlength="12" value="{{ old('short_name', $building->short_name) }}"
+                           placeholder="{{ $building->exists ? (new \App\Models\Building(['name' => $building->name]))->shortLabel() : 'Bijv. Ferlin' }}">
+                    <p class="mt-1 text-xs text-gray-500">Voor de maandweergave, bijv. Ferlin of RAPID. Leeg = automatisch.</p>
+                </div>
+                <div class="sm:col-span-2">
                     <label class="label" for="color">Kleur</label>
                     <input id="color" type="color" name="color" class="mt-1 h-9 w-20 rounded border-gray-300" value="{{ old('color', $building->color) }}">
                 </div>
