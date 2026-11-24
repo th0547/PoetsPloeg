@@ -53,7 +53,7 @@
                     <p class="mt-0.5 text-xs text-gray-500" x-text="[...notes(c), weekLine(c)].filter(Boolean).join(' · ')"></p>
                     <p class="mt-0.5 text-xs text-gray-500" x-show="c.day_shifts.length" x-text="'Die dag al: ' + dayLine(c)"></p>
                     <div class="mt-auto flex items-center justify-between gap-2 pt-2.5">
-                        <a x-show="c.phone" :href="'tel:' + c.phone" class="inline-flex items-center gap-1 text-xs text-teal-700 hover:underline"><x-icon name="phone" class="icon-sm" /><span x-text="c.phone"></span></a>
+                        <a x-show="c.phone" :href="$tel(c.phone)" class="inline-flex items-center gap-1 text-xs text-teal-700 hover:underline"><x-icon name="phone" class="icon-sm" /><span x-text="c.phone"></span></a>
                         <span x-show="!c.phone"></span>
                         <button type="button" class="btn btn-sm" :disabled="busy !== null" @click="assign(c)">Inplannen</button>
                     </div>

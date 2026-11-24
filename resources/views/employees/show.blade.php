@@ -91,13 +91,13 @@
                     <p class="text-xs text-gray-500">Hier staat {{ $employee->name }} vast op ingepland.</p>
                 </div>
                 <ul class="divide-y divide-gray-100">
-                    @forelse ($fixedTemplates as $template)
+                    @forelse ($fixedTemplates as $row)
                         <li class="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
-                            <a href="{{ route('buildings.show', $template->building) }}" class="flex min-w-0 items-center gap-2 font-medium text-gray-900 hover:text-teal-700">
-                                <span class="h-3 w-3 shrink-0 rounded" style="background: {{ $template->building->color }}"></span>
-                                <span class="truncate">{{ $template->building->name }} · {{ $template->name }}</span>
+                            <a href="{{ route('buildings.show', $row->template->building) }}" class="flex min-w-0 items-center gap-2 font-medium text-gray-900 hover:text-teal-700">
+                                <span class="h-3 w-3 shrink-0 rounded" style="background: {{ $row->template->building->color }}"></span>
+                                <span class="truncate">{{ $row->template->building->name }} · {{ $row->template->name }}</span>
                             </a>
-                            <span class="text-xs text-gray-500">{{ $template->recurrenceLabel() }}, {{ $template->timesLabel() }}</span>
+                            <span class="text-xs text-gray-500">{{ $row->label }}</span>
                         </li>
                     @empty
                         <li class="px-4 py-4 text-sm text-gray-500">Geen vaste taken. Wijs iemand toe bij een pand, onder Vaste bezetting.</li>
@@ -109,7 +109,7 @@
         <aside class="space-y-6">
             <section class="card card-body space-y-3">
                 <h2 class="card-title">Contact</h2>
-                @if ($o['phone'])<a href="tel:{{ $o['phone'] }}" class="flex items-center gap-2 text-sm text-teal-700 hover:underline"><x-icon name="phone" />{{ $o['phone'] }}</a>@endif
+                @if (\App\Support\Phone::href($o['phone']))<a href="{{ \App\Support\Phone::href($o['phone']) }}" class="flex items-center gap-2 text-sm text-teal-700 hover:underline"><x-icon name="phone" />{{ $o['phone'] }}</a>@elseif ($o['phone'])<p class="flex items-center gap-2 text-sm text-gray-700"><x-icon name="phone" />{{ $o['phone'] }}</p>@endif
                 @if ($o['email'])<a href="mailto:{{ $o['email'] }}" class="flex items-center gap-2 break-all text-sm text-teal-700 hover:underline"><x-icon name="mail" />{{ $o['email'] }}</a>@endif
                 @if (! $o['phone'] && ! $o['email'])<p class="text-sm text-gray-500">Geen contactgegevens ingevuld.</p>@endif
                 @if ($o['notes'])<p class="whitespace-pre-line border-t border-gray-100 pt-3 text-sm text-gray-600">{{ $o['notes'] }}</p>@endif

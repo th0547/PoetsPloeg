@@ -43,6 +43,9 @@ class ConflictChecker
     /** @var array<int, list<array>> rustvensters per medewerker zoals opgeslagen (zie restWindows) */
     private array $restWindowCache = [];
 
+    /** @var array<int, list<array{s: int, e: int, day: string, id: int, row: object}>> diensten per medewerker als timestamps, op begin */
+    private array $timelineCache = [];
+
     /**
      * Waarschuwingen voor alle bestaande toewijzingen van de gegeven diensten.
      *
@@ -170,6 +173,7 @@ class ConflictChecker
         $windowStart = CarbonImmutable::instance($from)->startOfDay()->subDays(9);
         $windowEnd = CarbonImmutable::instance($to)->endOfDay()->addDays(9);
         $this->restWindowCache = [];
+        $this->timelineCache = [];
 
         $this->employees = Employee::query()
             ->with(['skills:id', 'buildings:id', 'availabilityPatterns', 'availabilityDays'])
@@ -249,7 +253,14 @@ class ConflictChecker
         }
 
         $mine = $this->assignments[$employeeId] ?? collect();
-        $overlap = $mine->first(fn ($a) => $a->shift_id !== $shift->id && $a->starts_at->lt($end) && $a->ends_at->gt($start));
+        [$startTs, $endTs] = [$start->getTimestamp(), $end->getTimestamp()];
+        $overlap = null;
+        foreach ($this->timeline($employeeId, $mine) as $item) {
+            if ($item['id'] !== $shift->id && $item['s'] < $endTs && $item['e'] > $startTs) {
+                $overlap = $item['row'];
+                break;
+            }
+        }
         if ($overlap) {
             $warnings[] = $this->warning('overlap', self::DANGER, sprintf(
                 'Dubbel ingepland: %s – %s (%s–%s)',
@@ -358,9 +369,22 @@ class ConflictChecker
         $warnings = [];
 
         $nightRest = $policy->get('roster.rest_after_night_hours');
-        $others = $mine->filter(fn ($a) => $a->shift_id !== $shift->id);
-        $previous = $others->filter(fn ($a) => $a->ends_at->lte($start))->sortByDesc(fn ($a) => $a->ends_at->getTimestamp())->first();
-        $next = $others->filter(fn ($a) => $a->starts_at->gte($end))->sortBy(fn ($a) => $a->starts_at->getTimestamp())->first();
+        // Vorige en volgende dienst, op timestamps (dit loopt voor elke dienst × medewerker; Carbon is hier te traag).
+        [$startTs, $endTs] = [$start->getTimestamp(), $end->getTimestamp()];
+        $previous = $next = null;
+        foreach ($this->timeline($employeeId, $mine) as $item) {
+            if ($item['id'] === $shift->id) {
+                continue;
+            }
+            if ($item['e'] <= $startTs && (! $previous || $item['e'] > $previous['e'])) {
+                $previous = $item;
+            }
+            if ($item['s'] >= $endTs && (! $next || $item['s'] < $next['s'])) {
+                $next = $item;
+            }
+        }
+        $previous = $previous['row'] ?? null;
+        $next = $next['row'] ?? null;
         if ($previous && $this->isNightShift($previous->starts_at, $previous->ends_at)
             && ($gap = $previous->ends_at->diffInMinutes($start) / 60) < $nightRest) {
             $warnings[] = $this->warning('rest', self::WARNING, sprintf(
@@ -431,19 +455,33 @@ class ConflictChecker
      */
     private function restWindowsFor(Shift $shift, int $employeeId, Collection $mine, CarbonImmutable $start, CarbonImmutable $end): array
     {
+        $timeline = $this->timeline($employeeId, $mine);
+        [$startTs, $endTs] = [$start->getTimestamp(), $end->getTimestamp()];
         $stored = $shift->id !== null
-            && $mine->contains(fn ($a) => $a->shift_id === $shift->id && $a->starts_at->eq($start) && $a->ends_at->eq($end));
+            && collect($timeline)->contains(fn ($i) => $i['id'] === $shift->id && $i['s'] === $startTs && $i['e'] === $endTs);
         if ($stored) {
-            return $this->restWindowCache[$employeeId] ??= $this->restWindows($mine->map(fn ($a) => [$a->starts_at, $a->ends_at]));
+            return $this->restWindowCache[$employeeId] ??= $this->restWindows($timeline);
         }
 
-        $from = $start->subDays(9);
-        $to = $end->addDays(9);
+        // Alleen de dagen rond deze dienst doen ertoe: zijn eigen venster, dat van de dag ervoor, en 7 dagen eromheen.
+        $from = $startTs - 9 * self::DAY;
+        $to = $endTs + 9 * self::DAY;
+        $items = array_filter($timeline, fn ($i) => $i['id'] !== $shift->id && $i['e'] > $from && $i['s'] < $to);
+        $items[] = ['s' => $startTs, 'e' => $endTs, 'day' => $start->toDateString()];
 
-        return $this->restWindows($mine
-            ->filter(fn ($a) => $a->shift_id !== $shift->id && $a->ends_at->gt($from) && $a->starts_at->lt($to))
-            ->map(fn ($a) => [$a->starts_at, $a->ends_at])
-            ->push([$start, $end]));
+        return $this->restWindows($items);
+    }
+
+    /**
+     * Diensten van de medewerker als timestamps, één keer per load() berekend.
+     *
+     * @return list<array{s: int, e: int, day: string, id: int, row: object}>
+     */
+    private function timeline(int $employeeId, Collection $mine): array
+    {
+        return $this->timelineCache[$employeeId] ??= $mine
+            ->map(fn ($a) => ['s' => $a->starts_at->getTimestamp(), 'e' => $a->ends_at->getTimestamp(), 'day' => $a->starts_at->toDateString(), 'id' => $a->shift_id, 'row' => $a])
+            ->sortBy('s')->values()->all();
     }
 
     /**
@@ -451,17 +489,16 @@ class ConflictChecker
      * langste aaneengesloten rust erin. Tijden zijn timestamps, de rust is in seconden. "from" is het einde van de
      * dienst waarna die rust begint en wijst de rust dus eenduidig aan (twee vensters kunnen dezelfde rust delen).
      *
-     * @param  Collection<int, array{0: CarbonImmutable, 1: CarbonImmutable}>  $shifts  begin en eind
+     * @param  iterable<array{s: int, e: int, day: string}>  $shifts  begin en eind (timestamps) en de dag van het begin
      * @return list<array{day: string, start: int, rest: int, from: int, to: int}>
      */
-    private function restWindows(Collection $shifts): array
+    private function restWindows(iterable $shifts): array
     {
         $firstStart = [];
         $intervals = [];
-        foreach ($shifts as [$s, $e]) {
-            $day = $s->toDateString();
-            $firstStart[$day] = min($firstStart[$day] ?? PHP_INT_MAX, $s->getTimestamp());
-            $intervals[] = [$s->getTimestamp(), $e->getTimestamp()];
+        foreach ($shifts as $shift) {
+            $firstStart[$shift['day']] = min($firstStart[$shift['day']] ?? PHP_INT_MAX, $shift['s']);
+            $intervals[] = [$shift['s'], $shift['e']];
         }
         ksort($firstStart);
         sort($intervals);
@@ -536,12 +573,15 @@ class ConflictChecker
 
     private function hoursInWeek(int $employeeId, CarbonImmutable $weekStart, ?int $excludeShiftId = null): float
     {
-        $weekEnd = $weekStart->addWeek();
-        $minutes = ($this->assignments[$employeeId] ?? collect())
-            ->filter(fn ($a) => $a->shift_id !== $excludeShiftId && $a->starts_at->gte($weekStart) && $a->starts_at->lt($weekEnd))
-            ->sum(fn ($a) => $a->starts_at->diffInMinutes($a->ends_at));
+        [$from, $to] = [$weekStart->getTimestamp(), $weekStart->addWeek()->getTimestamp()];
+        $seconds = 0;
+        foreach ($this->timeline($employeeId, $this->assignments[$employeeId] ?? collect()) as $item) {
+            if ($item['id'] !== $excludeShiftId && $item['s'] >= $from && $item['s'] < $to) {
+                $seconds += $item['e'] - $item['s'];
+            }
+        }
 
-        return round($minutes / 60, 2);
+        return round($seconds / 3600, 2);
     }
 
     private function num(float $n): string

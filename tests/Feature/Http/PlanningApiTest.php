@@ -24,7 +24,7 @@ class PlanningApiTest extends TestCase
     {
         $template = TaskTemplate::factory()->weekly([1, 3, 5])->create(['required_staff' => 2, 'start_time' => '18:00', 'end_time' => '20:30']);
         $employee = Employee::factory()->create(['name' => 'Anna Jansen', 'contract_hours_max' => 20]);
-        $template->employees()->attach($employee);
+        $this->assignFixed($template, $employee);
 
         $data = $this->getJson('/api/planning?from=2026-10-12&to=2026-10-18')->assertOk()->json();
 

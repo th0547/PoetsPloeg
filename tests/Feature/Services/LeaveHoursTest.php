@@ -55,7 +55,7 @@ class LeaveHoursTest extends TestCase
     public function test_then_fixed_tasks_then_contract_hours(): void
     {
         $template = TaskTemplate::factory()->weekly([2])->create(['start_time' => '18:00', 'end_time' => '21:00', 'valid_from' => '2026-11-01']);
-        $template->employees()->attach($this->anna->id, ['position' => 0]);
+        $this->assignFixed($template, $this->anna);
 
         $this->assertSame(['hours' => 3.0, 'source' => 'vaste bezetting'], array_intersect_key($this->estimate('2026-11-17 00:00', '2026-11-17 23:59'), ['hours' => 0, 'source' => 0]));
 

@@ -30,15 +30,17 @@ class FixedStaffCheck
     public function __construct(private ConflictChecker $checker, private DutchHolidays $holidays) {}
 
     /**
-     * De tijdvakken van de taak vanaf vandaag.
+     * De tijdvakken van de taak vanaf vandaag, met het patroon (index in $template->patterns) waaruit ze komen.
+     * Vallen twee patronen op dezelfde dag en begintijd, dan telt het eerste (zoals in de ShiftGenerator).
      *
-     * @return Collection<int, array{0: CarbonImmutable, 1: CarbonImmutable}>
+     * @return Collection<int, array{0: CarbonImmutable, 1: CarbonImmutable, 2: int}>
      */
     public function occurrences(TaskTemplate $template, ?int $weeks = null): Collection
     {
         $weeks ??= (int) config('poetsploeg.generate_weeks_ahead');
         $from = CarbonImmutable::today();
         $to = $from->addWeeks(max(1, $weeks));
+        $patterns = $template->patterns->values();
 
         $slots = collect();
         $seen = [];
@@ -51,7 +53,7 @@ class FixedStaffCheck
                 $key = $startsAt->format('Y-m-d H:i');
                 if (! isset($seen[$key])) {
                     $seen[$key] = true;
-                    $slots->push([$startsAt, $endsAt]);
+                    $slots->push([$startsAt, $endsAt, (int) $patterns->search($pattern, true)]);
                 }
             }
         }
@@ -60,16 +62,20 @@ class FixedStaffCheck
     }
 
     /**
+     * Per patroon: kan elke medewerker de diensten van dat patroon draaien?
+     *
      * @param  TaskTemplate  $template  met de relaties patterns en skills gezet; mag ongesaved zijn
      * @param  Collection<int, int>|array<int, int>  $employeeIds
      * @param  int|null  $ignoreTemplateId  bestaande taak waarvan de eigen diensten niet als overlap tellen
-     * @return array<int, array{employee_id: int, name: string, status: string, total: int, possible: int, summary: string, issues: list<array>, notes: list<string>}>
+     * @return array<int, array<int, array{employee_id: int, name: string, status: string, total: int, possible: int, summary: string, issues: list<array>, notes: list<string>}>>
+     *                                                                                                                                                                             [index van het patroon][employee_id]
      */
     public function forTemplate(TaskTemplate $template, Collection|array $employeeIds, ?int $ignoreTemplateId = null, ?int $weeks = null): array
     {
+        $patternCount = $template->patterns->count();
         $ids = collect($employeeIds)->map(fn ($id) => (int) $id)->unique()->values();
-        if ($ids->isEmpty()) {
-            return [];
+        if ($ids->isEmpty() || $patternCount === 0) {
+            return array_fill(0, $patternCount, []);
         }
         $employees = Employee::whereIn('id', $ids)->get(['id', 'name', 'contract_hours_max'])->keyBy('id');
         $slots = $this->occurrences($template, $weeks);
@@ -89,9 +95,14 @@ class FixedStaffCheck
         $checks = $this->checker->forOccurrences($shifts, $ids, $ignoreTemplateId);
 
         $result = [];
-        foreach ($ids as $id) {
-            if ($employee = $employees->get($id)) {
-                $result[$id] = $this->summarise($employee, $slots, array_map(fn ($row) => $row[$id], $checks));
+        for ($p = 0; $p < $patternCount; $p++) {
+            $indexes = $slots->keys()->filter(fn ($i) => $slots[$i][2] === $p)->values();
+            $patternSlots = $indexes->map(fn ($i) => $slots[$i]);
+            $result[$p] = [];
+            foreach ($ids as $id) {
+                if ($employee = $employees->get($id)) {
+                    $result[$p][$id] = $this->summarise($employee, $patternSlots, $indexes->map(fn ($i) => $checks[$i][$id])->all());
+                }
             }
         }
 
@@ -99,16 +110,31 @@ class FixedStaffCheck
     }
 
     /**
+     * Uitkomsten van forTemplate() voor alleen de gekozen vaste krachten per patroon.
+     *
+     * @param  array<int, array<int, array>>  $results  van forTemplate()
+     * @param  array<int, list<int>>  $selected  [index van het patroon] => employee_ids
+     * @return array<int, array<int, array>>
+     */
+    public static function selected(array $results, array $selected): array
+    {
+        return collect($results)
+            ->map(fn (array $perEmployee, int $p) => array_intersect_key($perEmployee, array_flip($selected[$p] ?? [])))
+            ->all();
+    }
+
+    /**
      * Een taak uit (gevalideerde) formuliervelden, zonder hem op te slaan.
      *
-     * @param  array<string, mixed>  $data  start_time, end_time, patterns, valid_from, valid_until, skip_holidays, skills
+     * @param  array<string, mixed>  $data  patterns (met tijden), valid_from, valid_until, skip_holidays, skills
      */
     public static function draft(Building $building, array $data): TaskTemplate
     {
+        $patterns = array_values($data['patterns']);
         $template = new TaskTemplate([
             'name' => $data['name'] ?? 'Taak',
-            'start_time' => $data['start_time'],
-            'end_time' => $data['end_time'],
+            'start_time' => $patterns[0]['start_time'] ?? '00:00',
+            'end_time' => $patterns[0]['end_time'] ?? '00:00',
             'required_staff' => $data['required_staff'] ?? 1,
             'valid_from' => $data['valid_from'],
             'valid_until' => $data['valid_until'] ?? null,
@@ -116,7 +142,7 @@ class FixedStaffCheck
             'active' => true,
         ]);
         $template->building_id = $building->id;
-        $template->setRelation('patterns', collect(array_values($data['patterns']))
+        $template->setRelation('patterns', collect($patterns)
             ->map(fn (array $p, int $i) => new TaskTemplatePattern(TaskTemplatePattern::attributesFromInput($p, $i))));
         $template->setRelation('skills', Skill::whereIn('id', $data['skills'] ?? [])->get(['id', 'name']));
 
@@ -131,11 +157,11 @@ class FixedStaffCheck
      */
     public function missingOn(Shift $shift): array
     {
-        $shift->loadMissing(['template.employees:id,name,color,active', 'assignments']);
+        $shift->loadMissing(['template.patterns.employees:id,name,color,active', 'assignments']);
         if (! $shift->template || $shift->openSlots() === 0) {
             return [];
         }
-        $missing = $shift->template->employees
+        $missing = $shift->template->staffFor($shift)
             ->where('active', true)
             ->whereNotIn('id', $shift->assignments->pluck('employee_id'))
             ->take(max(1, $shift->required_staff));
@@ -166,6 +192,7 @@ class FixedStaffCheck
     /**
      * Eén regel per medewerker met een probleem, voor de waarschuwing bij opslaan.
      *
+     * @param  array<int, array>  $results  per medewerker (één patroon)
      * @return list<string>
      */
     public static function messages(array $results): array
@@ -178,7 +205,28 @@ class FixedStaffCheck
     }
 
     /**
-     * @param  Collection<int, array{0: CarbonImmutable, 1: CarbonImmutable}>  $slots
+     * Zoals messages(), voor alle patronen; bij meer patronen met het patroon ervoor ("Elke week op di 12:00–13:00 – Jan: …").
+     *
+     * @param  array<int, array<int, array>>  $results  [index van het patroon][employee_id]
+     * @return list<string>
+     */
+    public static function patternMessages(TaskTemplate $template, array $results): array
+    {
+        $patterns = $template->patterns->values();
+
+        return collect($results)->flatMap(fn (array $perEmployee, int $p) => collect(self::messages($perEmployee))
+            ->map(fn ($m) => $patterns->count() > 1 && $patterns->has($p) ? $patterns[$p]->label().' '.$patterns[$p]->timesLabel($template).' – '.$m : $m))
+            ->values()->all();
+    }
+
+    /** Eén uitkomst per patroon en medewerker, voor needsConfirmation() en de melding na opslaan. */
+    public static function flatten(array $results): array
+    {
+        return collect($results)->flatMap(fn (array $perEmployee) => array_values($perEmployee))->all();
+    }
+
+    /**
+     * @param  Collection<int, array{0: CarbonImmutable, 1: CarbonImmutable, 2: int}>  $slots
      * @param  list<array{warnings: list<array>, checks: array}>  $checks  per tijdvak
      */
     private function summarise(Employee $employee, Collection $slots, array $checks): array

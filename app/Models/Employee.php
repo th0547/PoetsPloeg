@@ -173,8 +173,9 @@ class Employee extends Model
         return $this->belongsToMany(Shift::class, 'shift_assignments')->withPivot('source')->withTimestamps();
     }
 
-    public function fixedTemplates(): BelongsToMany
+    /** Patronen van vaste taken waarop deze medewerker vast staat. */
+    public function fixedPatterns(): BelongsToMany
     {
-        return $this->belongsToMany(TaskTemplate::class);
+        return $this->belongsToMany(TaskTemplatePattern::class, 'employee_task_template_pattern')->withPivot('position');
     }
 }

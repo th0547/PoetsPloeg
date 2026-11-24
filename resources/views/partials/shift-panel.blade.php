@@ -48,7 +48,7 @@
                                     <button type="button" class="block truncate text-left text-sm font-medium text-gray-900 hover:text-teal-700" :data-open-employee="a.employee_id" x-text="a.name"></button>
                                     <p class="flex flex-wrap items-center gap-x-2 text-xs text-gray-500">
                                         <span x-text="a.source"></span>
-                                        <a x-show="a.phone" :href="'tel:' + a.phone" class="inline-flex items-center gap-1 text-teal-700 hover:underline"><x-icon name="phone" class="icon-sm" /><span x-text="a.phone"></span></a>
+                                        <a x-show="a.phone" :href="$tel(a.phone)" class="inline-flex items-center gap-1 text-teal-700 hover:underline"><x-icon name="phone" class="icon-sm" /><span x-text="a.phone"></span></a>
                                     </p>
                                 </div>
                                 <div class="flex shrink-0 items-center gap-1">
@@ -99,7 +99,7 @@
                                         <button type="button" class="truncate text-sm font-medium text-gray-900 hover:text-teal-700" :data-open-employee="c.id" x-text="c.name"></button>
                                         <span class="badge" :class="fit(c).badge" x-text="fit(c).label"></span>
                                     </p>
-                                    <a x-show="c.phone" :href="'tel:' + c.phone" class="inline-flex items-center gap-1 text-xs text-teal-700 hover:underline"><x-icon name="phone" class="icon-sm" /><span x-text="c.phone"></span></a>
+                                    <a x-show="c.phone" :href="$tel(c.phone)" class="inline-flex items-center gap-1 text-xs text-teal-700 hover:underline"><x-icon name="phone" class="icon-sm" /><span x-text="c.phone"></span></a>
                                 </div>
                                 <button type="button" class="btn btn-sm shrink-0" :class="c.fit === 'caution' ? '!bg-white !text-gray-700 border border-gray-300 hover:!bg-gray-50' : ''" @click="assign(c)" x-text="assignLabel()">Inplannen</button>
                             </div>

@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Models\Absence;
 use App\Models\Employee;
 use App\Models\Shift;
-use App\Models\TaskTemplate;
+use App\Models\TaskTemplatePattern;
 use App\Support\Policy;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -33,7 +33,8 @@ class LeaveHours
             ->overlapping($from, $to)
             ->whereHas('assignments', fn ($q) => $q->where('employee_id', $employee->id))
             ->get(['id', 'starts_at', 'ends_at']);
-        $templates = $employee->fixedTemplates()->where('task_templates.active', true)->with('patterns')->get();
+        // Patronen waarop de medewerker vast staat (van actieve taken).
+        $patterns = $employee->fixedPatterns()->whereHas('template', fn ($q) => $q->where('active', true))->with('template')->get();
         $workdays = $this->workdays($employee);
         $schedule = $employee->availabilitySchedule();
         $perWorkday = $workdays ? ((float) ($employee->contract_hours_min ?? $employee->contract_hours_max ?? 0)) / count($workdays) : 0.0;
@@ -52,7 +53,7 @@ class LeaveHours
             if ($dayShifts->isNotEmpty()) {
                 $hours = $dayShifts->sum(fn (Shift $s) => $this->overlapHours($s->starts_at, $s->ends_at, $from, $to));
                 $source = 'dienst';
-            } elseif (($fixed = $this->fixedHours($templates, $day, $from, $to)) !== null) {
+            } elseif (($fixed = $this->fixedHours($patterns, $day, $from, $to)) !== null) {
                 [$hours, $source] = [$fixed, 'vaste bezetting'];
             } elseif ($perWorkday > 0 && ($schedule->hasDateRules($day) ? $schedule->isWorkday($day) : in_array($day->dayOfWeekIso, $workdays, true))) {
                 // Losse datum (bijv. "hele dag niet") gaat vóór het weekpatroon.
@@ -126,18 +127,20 @@ class LeaveHours
     }
 
     /** Uren van vaste taken op deze dag binnen de periode, of null als er geen vaste taak is. */
-    private function fixedHours(Collection $templates, CarbonImmutable $day, CarbonImmutable $from, CarbonImmutable $to): ?float
+    private function fixedHours(Collection $patterns, CarbonImmutable $day, CarbonImmutable $from, CarbonImmutable $to): ?float
     {
         $hours = null;
-        foreach ($templates as $template) {
-            /** @var TaskTemplate $template */
+        foreach ($patterns as $pattern) {
+            /** @var TaskTemplatePattern $pattern */
+            $template = $pattern->template;
             if ($template->skip_holidays && app(DutchHolidays::class)->isSkippable($day)) {
                 continue;
             }
-            foreach ($template->patternsOn($day) as $pattern) {
-                [$start, $end] = ShiftGenerator::timesFor($day, $pattern->startTime($template), $pattern->endTime($template));
-                $hours = ($hours ?? 0) + $this->overlapHours($start, $end, $from, $to);
+            if (! $template->validOn($day) || ! $pattern->occursOn($day, $template)) {
+                continue;
             }
+            [$start, $end] = ShiftGenerator::timesFor($day, $pattern->startTime($template), $pattern->endTime($template));
+            $hours = ($hours ?? 0) + $this->overlapHours($start, $end, $from, $to);
         }
 
         return $hours;

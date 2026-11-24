@@ -9,7 +9,7 @@ import policyForm from './policy';
 import recurrenceEditor, { aiPrompt, recurrencePlayground } from './recurrence';
 import replaceCard from './replace-card';
 import shiftPanel, { openShift } from './shift-panel';
-import staffPicker, { staffingTable } from './staffing';
+import { staffingTable } from './staffing';
 import palette from './ui/palette';
 
 window.Alpine = Alpine;
@@ -29,11 +29,16 @@ Alpine.data('appShell', (collapsed = false) => ({
     },
 }));
 
+// Bel-link alleen voor een echt telefoonnummer (zelfde regel als App\Support\Phone); anders geen href.
+Alpine.magic('tel', () => (phone) => {
+    const value = String(phone ?? '').trim();
+    return /^\+?[0-9 ()-]+$/.test(value) && (value.match(/[0-9]/g) ?? []).length >= 6 ? 'tel:' + value.replace(/[^0-9+]/g, '') : null;
+});
+
 Alpine.data('shiftPanel', shiftPanel);
 Alpine.data('employeePanel', employeePanel);
 Alpine.data('palette', palette);
 Alpine.data('replaceCard', replaceCard);
-Alpine.data('staffPicker', staffPicker);
 Alpine.data('staffingTable', staffingTable);
 Alpine.data('availabilityEditor', availabilityEditor);
 Alpine.data('absenceForm', absenceForm);

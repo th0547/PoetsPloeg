@@ -12,7 +12,7 @@
         <section class="card card-body space-y-3">
             <h2 class="text-base font-semibold text-gray-900">Wanneer gebruik je dit?</h2>
             <p>Bij een vaste taak kies je de herhaling meestal met knoppen: elke week op maandag, om de week, de eerste maandag van de maand. Lukt het daarmee niet, kies dan bij <strong>Hoe vaak?</strong> voor <strong>Aangepast (code)</strong> en beschrijf het patroon met een korte code.</p>
-            <p>De code is de iCalendar-notatie (<em>RRULE</em>) die ook Google Agenda en Outlook gebruiken. Je kunt een taak ook meerdere patronen geven, elk met eigen tijden; vaak is dat eenvoudiger dan één ingewikkelde code.</p>
+            <p>De code is de iCalendar-notatie (<em>RRULE</em>) die ook Google Agenda en Outlook gebruiken. Je kunt een taak ook meerdere patronen geven, elk met eigen tijden en een eigen vaste bezetting; vaak is dat eenvoudiger dan één ingewikkelde code.</p>
         </section>
 
         <section class="card card-body space-y-3">

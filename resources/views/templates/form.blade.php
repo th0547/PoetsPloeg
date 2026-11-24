@@ -2,8 +2,6 @@
     $days = config('poetsploeg.weekdays');
     $short = config('poetsploeg.weekdays_short');
     $selectedSkills = collect(old('skills', $template->skills->pluck('id')))->map(fn ($i) => (int) $i)->all();
-    $selectedEmployees = collect(old('employees', $template->employees->pluck('id')))->map(fn ($i) => (int) $i)->all();
-    $sortedEmployees = $employees->sortBy(fn ($e) => [in_array($e->id, $knownIds) ? 0 : 1, $e->name]);
 @endphp
 <x-app-layout :title="$template->exists ? $template->name : 'Nieuwe taak'">
     <x-slot name="header">
@@ -14,8 +12,10 @@
         <a href="{{ route('buildings.show', $building) }}" class="btn-secondary">‹ Terug naar pand</a>
     </x-slot>
 
+    {{-- Herhaling en vaste bezetting: één Alpine-component op het formulier (resources/js/recurrence.js en staffing.js).
+         De beginstand gaat via @js() naar Alpine (JSON), nooit als losse tekst in een Alpine-attribuut. --}}
     <form method="POST" action="{{ $template->exists ? route('buildings.templates.update', [$building, $template]) : route('buildings.templates.store', $building) }}"
-          class="max-w-4xl space-y-6">
+          class="max-w-4xl space-y-6" x-data="recurrenceEditor(@js($recurrence))">
         @csrf
         @if ($template->exists) @method('PUT') @endif
 
@@ -27,17 +27,8 @@
                     <input id="name" name="name" class="input" value="{{ old('name', $template->name) }}" placeholder="Bijv. Dagelijkse schoonmaak, Glasbewassing" required autofocus>
                 </div>
                 <div class="sm:col-span-2">
-                    <label class="label" for="required_staff">Aantal personen</label>
-                    <input id="required_staff" type="number" min="1" max="50" name="required_staff" class="input" value="{{ old('required_staff', $template->required_staff) }}" required>
-                </div>
-                <div class="sm:col-span-2">
-                    <label class="label" for="start_time">Van</label>
-                    <input id="start_time" type="time" name="start_time" class="input" value="{{ old('start_time', substr($template->start_time, 0, 5)) }}" required>
-                </div>
-                <div class="sm:col-span-2">
-                    <label class="label" for="end_time">Tot</label>
-                    <input id="end_time" type="time" name="end_time" class="input" value="{{ old('end_time', substr($template->end_time, 0, 5)) }}" required>
-                    <p class="mt-1 text-xs text-gray-500">Eindtijd vóór begintijd = tot de volgende dag.</p>
+                    <label class="label" for="required_staff">Aantal personen per dienst</label>
+                    <input id="required_staff" type="number" min="1" max="50" name="required_staff" class="input" x-model.number="requiredStaff" value="{{ old('required_staff', $template->required_staff) }}" required>
                 </div>
                 <div class="sm:col-span-6">
                     <label class="label" for="description">Omschrijving / werkzaamheden</label>
@@ -46,13 +37,25 @@
             </div>
         </div>
 
-        {{-- Herhaling: één of meer patronen, met daaronder een voorbeeld van wat er wordt ingepland.
-             De beginstand gaat via @js() naar Alpine (JSON), nooit als losse tekst in een Alpine-attribuut. --}}
-        <div class="card card-body space-y-5" x-data="recurrenceEditor(@js($recurrence))" @input.window="syncTaskTimes($event)">
+        {{-- Herhaling: één of meer patronen, elk met eigen dagen, tijden en vaste bezetting, met daaronder een
+             voorbeeld van wat er wordt ingepland. --}}
+        <div class="card card-body space-y-5" id="bezetting">
             <div>
-                <h2 class="font-semibold text-gray-800">Herhaling</h2>
-                <p class="text-xs text-gray-500">Kies hoe vaak deze taak terugkomt. Met meerdere patronen maak je bijvoorbeeld “de ene week donderdag, de week erop maandag”. Onderaan zie je direct op welke dagen er wordt ingepland.</p>
+                <h2 class="font-semibold text-gray-800">Wanneer en door wie</h2>
+                <p class="text-xs text-gray-500">Per patroon kies je de dagen, de tijden en wie er vast op staat. Met meerdere patronen maak je bijvoorbeeld “ma, wo en vr Henk, di en do Jan” of “de ene week donderdag, de week erop maandag”. Onderaan zie je direct op welke dagen er wordt ingepland.</p>
             </div>
+
+            @error('staffing')
+                <div class="notice notice-warning">
+                    <x-icon name="alert" class="mt-0.5 text-amber-600" />
+                    <div>
+                        <p class="font-medium">Niet iedereen kan alle diensten van zijn of haar patroon draaien:</p>
+                        <ul class="ms-5 mt-1 list-disc">@foreach ($errors->get('staffing') as $message)<li>{{ $message }}</li>@endforeach</ul>
+                        <label class="mt-2 inline-flex items-center gap-2 font-medium"><input type="checkbox" class="checkbox" x-model="staffConfirmed"> Toch zo opslaan; open plekken vul ik zelf in</label>
+                    </div>
+                </div>
+            @enderror
+            <input type="hidden" name="confirm_staffing" :value="staffConfirmed ? 1 : 0" value="0">
 
             <template x-for="(p, i) in patterns" :key="p.uid">
                 <div class="space-y-4 rounded-lg border border-l-4 border-gray-200 p-4" :class="color(i).border">
@@ -70,6 +73,7 @@
                     </div>
 
                     {{-- Verborgen velden voor het formulier --}}
+                    <input type="hidden" :name="`patterns[${i}][id]`" :value="p.id" :disabled="!p.id">
                     <input type="hidden" :name="`patterns[${i}][recurrence]`" :value="recurrenceOf(p)">
                     <input type="hidden" :name="`patterns[${i}][repeat_every]`" :value="p.every" :disabled="p.mode === 'code'">
                     <template x-for="d in (p.mode === 'weekly' ? p.weekdays : [])" :key="d">
@@ -78,7 +82,9 @@
                     <input type="hidden" :name="`patterns[${i}][nth]`" :value="p.nth" :disabled="recurrenceOf(p) !== 'monthly_nth_weekday'">
                     <input type="hidden" :name="`patterns[${i}][weekday]`" :value="p.weekday" :disabled="recurrenceOf(p) !== 'monthly_nth_weekday'">
                     <input type="hidden" :name="`patterns[${i}][day_of_month]`" :value="p.dayOfMonth" :disabled="recurrenceOf(p) !== 'monthly_day'">
-                    <input type="hidden" :name="`patterns[${i}][own_times]`" :value="p.ownTimes ? 1 : 0">
+                    <template x-for="id in p.employees" :key="'emp' + id">
+                        <input type="hidden" :name="`patterns[${i}][employees][]`" :value="id">
+                    </template>
 
                     {{-- Per week of per maand --}}
                     <div class="grid gap-2 sm:grid-cols-2">
@@ -175,8 +181,22 @@
                         </p>
                     </div>
 
-                    {{-- Telt vanaf en tijden --}}
+                    {{-- Tijden en telt vanaf --}}
                     <div class="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <span class="label">Van – tot</span>
+                            <div class="mt-1 flex flex-wrap items-center gap-2">
+                                <input type="time" class="input mt-0 w-32" :name="`patterns[${i}][start_time]`" x-model="p.startTime" required :aria-label="`Begintijd patroon ${i + 1}`">
+                                <span class="text-gray-500">–</span>
+                                <input type="time" class="input mt-0 w-32" :name="`patterns[${i}][end_time]`" x-model="p.endTime" required :aria-label="`Eindtijd patroon ${i + 1}`">
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500" x-show="p.startTime && p.endTime && p.endTime <= p.startTime" x-cloak>Eindtijd vóór begintijd: tot de volgende dag.</p>
+                            @foreach (['start_time', 'end_time'] as $field)
+                                @foreach ($errors->get('patterns.*.'.$field) as $key => $messages)
+                                    <p class="field-error" x-show="i === {{ (int) explode('.', $key)[1] }}" x-cloak>{{ $messages[0] }}</p>
+                                @endforeach
+                            @endforeach
+                        </div>
                         <div>
                             <label class="label" :for="`starts-on-${p.uid}`">Telt vanaf</label>
                             <input type="date" class="input" :id="`starts-on-${p.uid}`" :name="`patterns[${i}][starts_on]`" x-model="p.startsOn" @change="refreshCode(p, 0)">
@@ -188,16 +208,43 @@
                                 </div>
                             </template>
                         </div>
-                        <div>
-                            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                                <input type="checkbox" class="checkbox" x-model="p.ownTimes"> Andere tijden
-                            </label>
-                            <div class="mt-1 flex items-center gap-2" x-show="p.ownTimes" x-cloak>
-                                <input type="time" class="input mt-0" :name="`patterns[${i}][start_time]`" x-model="p.startTime" :disabled="!p.ownTimes" aria-label="Begintijd van dit patroon">
-                                <span class="text-gray-500">–</span>
-                                <input type="time" class="input mt-0" :name="`patterns[${i}][end_time]`" x-model="p.endTime" :disabled="!p.ownTimes" aria-label="Eindtijd van dit patroon">
-                            </div>
-                            <p class="mt-1 text-xs text-gray-500" x-show="!p.ownTimes">Zelfde tijden als de taak (<span x-text="taskStart + '–' + taskEnd"></span>).</p>
+                    </div>
+
+                    {{-- Vaste bezetting van dit patroon --}}
+                    <div class="space-y-2 border-t border-gray-100 pt-4">
+                        <div class="flex flex-wrap items-baseline justify-between gap-2">
+                            <span class="label">Vaste bezetting</span>
+                            <span class="text-xs text-gray-500" x-show="staffTotal(i) !== null" x-cloak>
+                                getoetst op <span x-text="staffTotal(i)"></span> <span x-text="staffTotal(i) === 1 ? 'dienst' : 'diensten'"></span> in de komende {{ config('poetsploeg.generate_weeks_ahead') }} weken
+                                <span x-show="staffLoading" class="text-gray-400">· bijwerken…</span>
+                            </span>
+                        </div>
+                        <ul class="space-y-1.5" x-show="p.employees.length">
+                            <template x-for="(id, n) in p.employees" :key="'chip' + id">
+                                <li class="flex items-start gap-2.5 rounded-lg border px-3 py-2"
+                                    :class="staffResult(i, id)?.status && staffResult(i, id).status !== 'ok' ? 'border-amber-300 bg-amber-50/60' : 'border-teal-300 bg-teal-50/50'">
+                                    <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" :class="staffDot(i, id)"></span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="flex flex-wrap items-center gap-x-2 text-sm font-medium text-gray-900">
+                                            <span x-text="staffEmployee(id).name"></span>
+                                            <span class="text-xs font-normal text-teal-700" x-show="staffEmployee(id).known" title="Ingewerkt op dit pand">✓ kent pand</span>
+                                            <span class="text-xs font-normal text-amber-700" x-show="n >= requiredStaff" x-cloak>reserve: komt alleen in beeld als iemand anders niet kan</span>
+                                        </span>
+                                        <span class="block text-xs font-medium" :class="staffCls(i, id)" x-text="staffResult(i, id)?.summary ?? ''"></span>
+                                        <span class="block text-xs text-gray-600" x-show="staffDetail(i, id)" x-text="staffDetail(i, id)"></span>
+                                    </span>
+                                    <button type="button" class="text-sm text-gray-400 hover:text-red-600" @click="removeStaff(p, id)" :aria-label="`${staffEmployee(id).name} weghalen`">✕</button>
+                                </li>
+                            </template>
+                        </ul>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <select class="input mt-0 w-auto max-w-full" @change="addStaff(p, $event)" :aria-label="`Vaste kracht toevoegen aan patroon ${i + 1}`">
+                                <option value="" x-text="p.employees.length ? '+ Nog iemand toevoegen…' : '+ Vaste kracht kiezen…'"></option>
+                                <template x-for="e in staffCandidates(i)" :key="'opt' + e.id">
+                                    <option :value="e.id" x-text="staffOption(i, e)"></option>
+                                </template>
+                            </select>
+                            <span class="text-xs text-gray-500" x-show="!p.employees.length">Geen vaste kracht: de diensten van dit patroon komen bij Open diensten.</span>
                         </div>
                     </div>
                 </div>
@@ -205,7 +252,7 @@
 
             <div class="flex flex-wrap items-center gap-3">
                 <button type="button" class="btn-secondary" @click="addPattern()" :disabled="patterns.length >= maxPatterns">+ Patroon toevoegen</button>
-                <p class="text-xs text-gray-500" x-show="patterns.length < maxPatterns">Het nieuwe patroon begint een week later; handig voor een wisselend schema.</p>
+                <p class="text-xs text-gray-500" x-show="patterns.length < maxPatterns">Een nieuw wekelijks patroon krijgt de werkdagen die nog vrij zijn (handig voor “om de dag”); bij om de week begint het een week later.</p>
                 <p class="text-xs text-gray-500" x-show="patterns.length >= maxPatterns" x-cloak>Maximaal <span x-text="maxPatterns"></span> patronen per taak.</p>
             </div>
 
@@ -291,63 +338,6 @@
                 @empty
                     <p class="text-sm text-gray-500">Nog geen vaardigheden. <a href="{{ route('skills.index') }}" class="text-teal-700 hover:underline">Maak ze hier aan</a>.</p>
                 @endforelse
-            </div>
-        </div>
-
-        {{-- Vaste bezetting: bij elke medewerker staat of hij of zij de diensten van deze taak kan draaien
-             (beschikbaarheid, afwezigheid, andere diensten, contracturen). Zie resources/js/staffing.js. --}}
-        <div class="card card-body space-y-3" id="bezetting"
-             x-data="staffPicker(@js([
-                 'url' => route('api.staffing.check'),
-                 'buildingId' => $building->id,
-                 'templateId' => $template->exists ? $template->id : null,
-                 'selected' => $selectedEmployees,
-                 'serverWarned' => $errors->has('staffing'),
-             ]))">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h2 class="font-semibold text-gray-800">Vaste bezetting</h2>
-                    <p class="text-xs text-gray-500">Deze medewerkers worden automatisch op elke dienst van deze taak gezet (maximaal het aantal personen). Kan iemand een dienst niet draaien, dan blijft die plek open en zoek je een vervanger.</p>
-                </div>
-                <label class="inline-flex shrink-0 items-center gap-1.5 text-sm text-gray-600" x-show="total !== null" x-cloak>
-                    <input type="checkbox" class="checkbox" x-model="onlyFit"> Alleen wie alle diensten kan <span class="text-gray-400" x-text="'(' + fitCount() + ')'"></span>
-                </label>
-            </div>
-            <p class="text-xs text-gray-500" x-show="total !== null" x-cloak>
-                Getoetst op de <strong x-text="total"></strong> <span x-text="total === 1 ? 'dienst' : 'diensten'"></span> van de komende {{ config('poetsploeg.generate_weeks_ahead') }} weken: beschikbaarheid, afwezigheid, andere diensten en contracturen.
-                <span x-show="loading" class="text-gray-400">bijwerken…</span>
-            </p>
-            <p class="text-xs text-gray-500" x-show="total === null && !loading" x-cloak>Vul eerst de tijden en dagen in; dan zie je hier per medewerker of het past.</p>
-
-            @error('staffing')
-                <div class="notice notice-warning">
-                    <x-icon name="alert" class="mt-0.5 text-amber-600" />
-                    <div>
-                        <p class="font-medium">Niet iedereen kan alle diensten draaien:</p>
-                        <ul class="ms-5 mt-1 list-disc">@foreach ($errors->get('staffing') as $message)<li>{{ $message }}</li>@endforeach</ul>
-                        <label class="mt-2 inline-flex items-center gap-2 font-medium"><input type="checkbox" class="checkbox" x-model="confirmed"> Toch zo opslaan; open plekken vul ik zelf in</label>
-                    </div>
-                </div>
-            @enderror
-            <input type="hidden" name="confirm_staffing" :value="confirmed ? 1 : 0" value="0">
-
-            <div class="grid gap-2 sm:grid-cols-2">
-                @foreach ($sortedEmployees as $employee)
-                    <label class="flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2 hover:border-gray-300"
-                           x-show="visible({{ $employee->id }})" :style="{ order: rank({{ $employee->id }}) }"
-                           :class="selected.includes({{ $employee->id }}) ? (result({{ $employee->id }})?.status && result({{ $employee->id }}).status !== 'ok' ? 'border-amber-300 bg-amber-50/60' : 'border-teal-300 bg-teal-50/50') : 'border-gray-200'">
-                        <input type="checkbox" name="employees[]" value="{{ $employee->id }}" class="checkbox mt-0.5" x-model.number="selected" @checked(in_array($employee->id, $selectedEmployees))>
-                        <span class="min-w-0 flex-1">
-                            <span class="flex flex-wrap items-center gap-x-2 text-sm font-medium text-gray-900">
-                                {{ $employee->name }}
-                                @if (in_array($employee->id, $knownIds))<span class="text-xs font-normal text-teal-700" title="Ingewerkt op dit pand">✓ kent pand</span>@endif
-                            </span>
-                            <span class="block text-xs font-medium" :class="cls({{ $employee->id }})" x-text="result({{ $employee->id }})?.summary ?? ''"></span>
-                            <span class="block text-xs text-gray-600" x-show="detail({{ $employee->id }})" x-text="detail({{ $employee->id }})"></span>
-                        </span>
-                        <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" :class="dot({{ $employee->id }})"></span>
-                    </label>
-                @endforeach
             </div>
         </div>
 

@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Shift;
+use App\Rules\PhoneNumber;
 use App\Services\Audit;
 use App\Services\DutchHolidays;
 use App\Services\FixedStaffCheck;
 use App\Services\ShiftGenerator;
+use App\Services\StaffHours;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -53,9 +55,9 @@ class BuildingController extends Controller
         return redirect()->route('buildings.show', $building)->with('status', 'Pand aangemaakt. Voeg nu de vaste taken toe.');
     }
 
-    public function show(Request $request, Building $building, ShiftGenerator $generator, DutchHolidays $holidays): View
+    public function show(Request $request, Building $building, ShiftGenerator $generator, DutchHolidays $holidays, StaffHours $staffHours): View
     {
-        $building->load(['taskTemplates.skills', 'taskTemplates.employees', 'taskTemplates.patterns', 'employees']);
+        $building->load(['taskTemplates.skills', 'taskTemplates.patterns.employees', 'employees']);
         if (Gate::allows('view-contact-details')) {
             Audit::viewed($building, "Pand {$building->name}: contactgegevens en toegangsinstructies");
         }
@@ -86,7 +88,7 @@ class BuildingController extends Controller
 
         $staffEmployees = Employee::query()
             ->where(fn ($q) => $q->where('active', true)
-                ->orWhereIn('id', $building->taskTemplates->flatMap->employees->pluck('id')))
+                ->orWhereIn('id', $building->taskTemplates->flatMap->staff()->pluck('id')))
             ->orderBy('name')
             ->get();
         $knownIds = $building->employees->pluck('id')->all();
@@ -99,15 +101,20 @@ class BuildingController extends Controller
             'holidays' => $holidays->between($weekStart, $weekEnd),
             'staffEmployees' => $staffEmployees->sortBy(fn ($e) => [in_array($e->id, $knownIds) ? 0 : 1, $e->name])->values(),
             'knownIds' => $knownIds,
+            // Uren personeel: wat de vaste taken per week vragen, en wat er in de gekozen week is ingepland.
+            'templateHours' => $building->taskTemplates->mapWithKeys(fn ($t) => [$t->id => $staffHours->perWeek($t)]),
+            'rowHours' => $staffHours->forShifts($shifts)['per_row'],
+            'weekHours' => $staffHours->forShifts($shifts->whereNotNull('task_template_id')),
         ]);
     }
 
     /**
-     * Bezettingstabel: vaste bezetting en aantal personen van alle taken van een pand in één keer opslaan.
+     * Bezettingstabel: vaste bezetting (per patroon) en aantal personen van alle taken van een pand in één keer opslaan.
      */
     public function updateStaffing(Request $request, Building $building, ShiftGenerator $generator, FixedStaffCheck $staffCheck): RedirectResponse
     {
-        $templates = $building->taskTemplates()->with(['employees:id', 'patterns', 'skills:id,name'])->get()->keyBy('id');
+        $templates = $building->taskTemplates()->with(['patterns.employees:id', 'skills:id,name'])->get()->keyBy('id');
+        $patternIds = $templates->flatMap->patterns->pluck('id');
 
         $data = $request->validate([
             'staff' => ['array'],
@@ -117,8 +124,8 @@ class BuildingController extends Controller
             'fixed.*.*' => ['integer', 'exists:employees,id'],
         ], [], ['staff.*' => 'aantal personen']);
 
-        $unknown = collect(array_keys($data['staff'] ?? []))->merge(array_keys($data['fixed'] ?? []))
-            ->reject(fn ($id) => $templates->has((int) $id));
+        $unknown = collect(array_keys($data['staff'] ?? []))->reject(fn ($id) => $templates->has((int) $id))
+            ->merge(collect(array_keys($data['fixed'] ?? []))->reject(fn ($id) => $patternIds->contains((int) $id)));
         abort_if($unknown->isNotEmpty(), 422, 'Onbekende taak voor dit pand.');
 
         // Eerst bepalen wat er verandert; nieuwe vaste krachten toetsen we op beschikbaarheid, afwezigheid en overlap.
@@ -126,22 +133,22 @@ class BuildingController extends Controller
         $problems = [];
         $notes = [];
         foreach ($templates as $id => $template) {
-            $employeeIds = collect($data['fixed'][$id] ?? [])->map(fn ($e) => (int) $e)->unique()->values();
+            $patterns = $template->patterns->values();
             $staff = (int) ($data['staff'][$id] ?? $template->required_staff);
-            $current = $template->employees->pluck('id');
+            $selected = $patterns->map(fn ($p) => collect($data['fixed'][$p->id] ?? [])->map(fn ($e) => (int) $e)->unique()->values())->all();
+            $added = $patterns->map(fn ($p, $i) => $selected[$i]->diff($p->employees->pluck('id'))->values()->all())->all();
 
-            $sameStaff = $staff === $template->required_staff;
-            $sameEmployees = $employeeIds->sort()->values()->all() === $current->sort()->values()->all();
-            if ($sameStaff && $sameEmployees) {
+            $sameEmployees = $patterns->every(fn ($p, $i) => $selected[$i]->sort()->values()->all() === $p->employees->pluck('id')->sort()->values()->all());
+            if ($staff === $template->required_staff && $sameEmployees) {
                 continue;
             }
-            $changes[$id] = [$template, $employeeIds, $staff];
+            $changes[$id] = [$template, $selected, $staff];
 
-            $results = $staffCheck->forTemplate($template, $employeeIds->diff($current), $template->id);
-            foreach (FixedStaffCheck::messages($results) as $message) {
+            $results = FixedStaffCheck::selected($staffCheck->forTemplate($template, collect($added)->flatten()->unique(), $template->id), $added);
+            foreach (FixedStaffCheck::patternMessages($template, $results) as $message) {
                 $problems[] = $template->name.' – '.$message;
             }
-            foreach ($results as $r) {
+            foreach (FixedStaffCheck::flatten($results) as $r) {
                 if ($r['possible'] < $r['total']) {
                     $notes[] = sprintf('%s staat op %d van de %d diensten van %s', $r['name'], $r['possible'], $r['total'], $template->name);
                 }
@@ -155,11 +162,13 @@ class BuildingController extends Controller
         }
 
         DB::transaction(function () use ($changes, $building) {
-            foreach ($changes as [$template, $employeeIds, $staff]) {
+            foreach ($changes as [$template, $selected, $staff]) {
                 $template->update(['required_staff' => $staff]);
-                $template->employees()->sync($employeeIds->mapWithKeys(fn ($e, $i) => [$e => ['position' => $i]])->all());
-                // Wie vast op een taak staat, kent het pand.
-                $building->employees()->syncWithoutDetaching($employeeIds->all());
+                foreach ($template->patterns->values() as $i => $pattern) {
+                    $pattern->employees()->sync($selected[$i]->mapWithKeys(fn ($e, $position) => [$e => ['position' => $position]])->all());
+                    // Wie vast op een taak staat, kent het pand.
+                    $building->employees()->syncWithoutDetaching($selected[$i]->all());
+                }
             }
         });
 
@@ -204,11 +213,12 @@ class BuildingController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'short_name' => ['nullable', 'string', 'max:12'],
             'address' => ['nullable', 'string', 'max:255'],
             'postal_code' => ['nullable', 'string', 'max:10'],
             'city' => ['nullable', 'string', 'max:255'],
             'contact_name' => ['nullable', 'string', 'max:255'],
-            'contact_phone' => ['nullable', 'string', 'max:50'],
+            'contact_phone' => ['nullable', 'string', 'max:50', new PhoneNumber],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'access_instructions' => ['nullable', 'string', 'max:5000'],
             'notes' => ['nullable', 'string', 'max:5000'],

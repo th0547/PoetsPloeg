@@ -73,6 +73,25 @@ class ReplacementFinderTest extends TestCase
         $this->assertSame([], array_values(array_filter($result['candidates'][0]['warnings'], fn ($w) => $w['type'] === 'rest')));
     }
 
+    public function test_caution_always_shows_its_reason(): void
+    {
+        // Issue #69: alleen een rustwaarschuwing (17:00–23:00 en de volgende ochtend om 06:00) geeft "Let op",
+        // en die reden staat er dan ook bij.
+        $shift = Shift::factory()->at('2026-11-17', '06:00', '10:00')->create();
+        $employee = Employee::factory()->create(['name' => 'Laat']);
+        $employee->buildings()->attach($shift->building);
+        $evening = Shift::factory()->at('2026-11-16', '17:00', '23:00')->create();
+        $evening->assignments()->create(['employee_id' => $employee->id]);
+
+        $candidate = app(ReplacementFinder::class)->candidates($shift)['candidates'][0];
+
+        $this->assertSame('caution', $candidate['fit']);
+        $rest = collect($candidate['reasons'])->first(fn ($r) => str_contains($r['text'], 'aaneengesloten rust'));
+        $this->assertNotNull($rest);
+        $this->assertFalse($rest['ok']);
+        $this->assertArrayNotHasKey('soft', $rest);
+    }
+
     public function test_prefers_employee_with_fewer_hours_on_equal_score(): void
     {
         $shift = Shift::factory()->at('2026-10-14', '18:00', '20:00')->create();

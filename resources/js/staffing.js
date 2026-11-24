@@ -20,117 +20,146 @@ async function confirmProblems(problems) {
 }
 
 /**
- * Vaste bezetting in het taakformulier: toont bij elke medewerker of hij of zij de diensten van deze
- * taak kan draaien (beschikbaarheid, afwezigheid, andere diensten, contracturen), ook terwijl de
+ * Vaste bezetting per patroon in het taakformulier. Wordt in de herhalingseditor (recurrence.js) gemengd:
+ * elk patroon heeft `employees` (ids, in volgorde). Bij elke medewerker staat of hij of zij de diensten van
+ * dat patroon kan draaien (beschikbaarheid, afwezigheid, andere diensten, contracturen), ook terwijl de
  * tijden of dagen nog worden aangepast.
  */
-export default function staffPicker(config) {
+export function patternStaffing(config = {}) {
     return {
-        results: {},
-        total: null,
-        loading: false,
-        onlyFit: false,
-        selected: config.selected ?? [],
-        confirmed: false,
-        timer: null,
-        request: 0,
+        staffEmployees: config.employees ?? [],
+        staffResults: [],
+        staffLoading: false,
+        staffConfirmed: false,
+        staffTimer: null,
+        staffRequest: 0,
+        // Elke wijziging verhoogt staffVersion; staffCheckedVersion is de versie van de laatste uitkomst.
+        staffVersion: 0,
+        staffCheckedVersion: -1,
+        staffSubmitting: false,
 
-        init() {
+        initStaffing() {
             const form = this.$el.closest('form');
-            // Elke wijziging in het formulier (tijden, dagen, vaardigheden) kan de uitkomst veranderen.
-            form.addEventListener('input', () => this.schedule());
-            form.addEventListener('change', () => this.schedule());
-            form.addEventListener('submit', (event) => this.onSubmit(event, form));
-            this.check();
+            if (!form || !config.url) return;
+            // Elke wijziging (tijden, dagen, vaardigheden, wie er vast op staat) kan de uitkomst veranderen.
+            form.addEventListener('input', () => this.scheduleStaff());
+            form.addEventListener('change', () => this.scheduleStaff());
+            this.$watch('patterns', () => this.scheduleStaff());
+            form.addEventListener('submit', (event) => this.onStaffSubmit(event, form));
+            this.$nextTick(() => this.checkStaff());
         },
 
-        schedule() {
-            window.clearTimeout(this.timer);
-            this.timer = window.setTimeout(() => this.check(), 450);
+        scheduleStaff() {
+            this.staffVersion++;
+            window.clearTimeout(this.staffTimer);
+            this.staffTimer = window.setTimeout(() => this.checkStaff(), 450);
         },
 
-        async check() {
+        async checkStaff() {
             const form = this.$el.closest('form');
             const body = new FormData(form);
             body.delete('_method');
             body.set('building_id', config.buildingId);
             if (config.templateId) body.set('template_id', config.templateId);
 
-            const id = ++this.request;
-            this.loading = true;
+            const id = ++this.staffRequest;
+            const version = this.staffVersion;
+            this.staffLoading = true;
             try {
                 const { data } = await axios.post(config.url, body);
-                if (id !== this.request) return;
-                this.results = data.employees;
-                this.total = data.total;
+                if (id === this.staffRequest) {
+                    this.staffResults = data.patterns;
+                    this.staffCheckedVersion = version;
+                }
             } catch (e) {
                 // Formulier nog niet compleet (bijv. geen dag gekozen): dan valt er niets te toetsen.
-                if (id === this.request) {
-                    this.results = {};
-                    this.total = null;
-                }
+                if (id === this.staffRequest) this.staffResults = [];
             } finally {
-                if (id === this.request) this.loading = false;
+                if (id === this.staffRequest) this.staffLoading = false;
             }
         },
 
-        result(id) {
-            return this.results[id] ?? null;
+        staffEmployee(id) {
+            return this.staffEmployees.find((e) => e.id === id) ?? { id, name: '?', known: false };
         },
 
-        visible(id) {
-            if (!this.onlyFit || this.selected.includes(id)) return true;
-            const r = this.result(id);
-            return !r || r.status === 'ok';
+        staffResult(index, id) {
+            return this.staffResults[index]?.employees?.[id] ?? null;
         },
 
-        /** Volgorde in de lijst: gekozen eerst, dan wie alles kan, dan deels, dan wie niet kan. */
-        rank(id) {
-            if (this.selected.includes(id)) return 0;
-            return { ok: 1, warning: 2, blocked: 3 }[this.result(id)?.status] ?? 1;
+        staffTotal(index) {
+            return this.staffResults[index]?.total ?? null;
         },
 
-        cls(id) {
-            return STATUS[this.result(id)?.status]?.cls ?? 'text-gray-400';
+        /** Wie er nog bij dit patroon kan: eerst wie alles kan, dan wie het pand kent, dan op naam. */
+        staffCandidates(index) {
+            const p = this.patterns[index];
+            const rank = (e) => ({ ok: 0, warning: 1, blocked: 2 }[this.staffResult(index, e.id)?.status] ?? 1);
+            return this.staffEmployees
+                .filter((e) => !p.employees.includes(e.id))
+                .sort((a, b) => rank(a) - rank(b) || Number(b.known) - Number(a.known) || a.name.localeCompare(b.name, 'nl'));
         },
 
-        dot(id) {
-            return STATUS[this.result(id)?.status]?.dot ?? 'bg-gray-300';
+        staffOption(index, e) {
+            const r = this.staffResult(index, e.id);
+            const mark = { ok: '✓', warning: '!', blocked: '✗' }[r?.status] ?? '·';
+            return `${mark} ${e.name}${e.known ? ' (kent pand)' : ''}${r ? ' – ' + r.summary.toLowerCase() : ''}`;
         },
 
-        detail(id) {
-            const r = this.result(id);
+        addStaff(p, event) {
+            const id = Number(event.target.value);
+            event.target.value = '';
+            if (id && !p.employees.includes(id)) p.employees.push(id);
+        },
+
+        removeStaff(p, id) {
+            p.employees = p.employees.filter((e) => e !== id);
+        },
+
+        staffCls(index, id) {
+            return STATUS[this.staffResult(index, id)?.status]?.cls ?? 'text-gray-500';
+        },
+
+        staffDot(index, id) {
+            return STATUS[this.staffResult(index, id)?.status]?.dot ?? 'bg-gray-300';
+        },
+
+        staffDetail(index, id) {
+            const r = this.staffResult(index, id);
             if (!r) return '';
             return [issueText(r), ...r.notes].filter(Boolean).join(' · ');
         },
 
-        fitCount() {
-            return Object.values(this.results).filter((r) => r.status === 'ok').length;
-        },
-
-        problems() {
-            return this.selected
-                .map((id) => this.result(id))
+        staffProblems() {
+            return this.patterns.flatMap((p, index) => p.employees
+                .map((id) => this.staffResult(index, id))
                 .filter((r) => r && r.status !== 'ok')
-                .map((r) => `${r.name}: ${issueText(r)}`);
+                .map((r) => (this.patterns.length > 1 ? `Patroon ${index + 1} – ` : '') + `${r.name}: ${issueText(r)}`));
         },
 
-        async onSubmit(event, form) {
-            const problems = this.problems();
+        async onStaffSubmit(event, form) {
             // Na een waarschuwing van de server beslist het vinkje "Toch zo opslaan".
-            if (this.confirmed || !problems.length || config.serverWarned) return;
+            if (this.staffConfirmed || this.staffSubmitting || config.serverWarned) return;
+            const stale = this.staffCheckedVersion !== this.staffVersion;
+            if (!stale && !this.staffProblems().length) return;
             event.preventDefault();
-            if (await confirmProblems(problems)) {
-                this.confirmed = true;
-                this.$nextTick(() => form.requestSubmit(event.submitter ?? undefined));
+            if (stale) {
+                // Eerst de controle met de laatste invoer afwachten, anders oordelen we op een oude uitkomst.
+                window.clearTimeout(this.staffTimer);
+                await this.checkStaff();
             }
+            const problems = this.staffProblems();
+            if (problems.length && !(await confirmProblems(problems))) return;
+            if (problems.length) this.staffConfirmed = true;
+            this.staffSubmitting = true;
+            this.$nextTick(() => form.requestSubmit(event.submitter ?? undefined));
         },
     };
 }
 
 /**
- * Bezettingstabel op de pandpagina: per vakje (taak × medewerker) een markering of die medewerker
- * de diensten van die taak kan draaien.
+ * Bezettingstabel op de pandpagina: per vakje (patroon × medewerker) een markering of die medewerker
+ * de diensten van dat patroon kan draaien.
  */
 export function staffingTable(config) {
     return {
@@ -143,23 +172,23 @@ export function staffingTable(config) {
             this.$el.querySelector('form')?.addEventListener('submit', (event) => this.onSubmit(event));
             try {
                 const { data } = await axios.post(config.url, { building_id: config.buildingId });
-                this.results = data.templates;
+                this.results = data.patterns;
                 this.loaded = true;
             } catch (e) {
                 this.loaded = false;
             }
         },
 
-        result(templateId, employeeId) {
-            return this.results[templateId]?.[employeeId] ?? null;
+        result(patternId, employeeId) {
+            return this.results[patternId]?.[employeeId] ?? null;
         },
 
-        dot(templateId, employeeId) {
-            return STATUS[this.result(templateId, employeeId)?.status]?.dot ?? 'bg-transparent';
+        dot(patternId, employeeId) {
+            return STATUS[this.result(patternId, employeeId)?.status]?.dot ?? 'bg-transparent';
         },
 
-        title(templateId, employeeId) {
-            const r = this.result(templateId, employeeId);
+        title(patternId, employeeId) {
+            const r = this.result(patternId, employeeId);
             if (!r) return '';
             return [r.summary, issueText(r), ...r.notes].filter(Boolean).join('\n');
         },
@@ -167,9 +196,9 @@ export function staffingTable(config) {
         async onSubmit(event) {
             if (this.confirmed) return;
             // Alleen nieuw aangevinkte vakjes: wie er al stond, is eerder beoordeeld.
-            const problems = [...event.target.querySelectorAll('input[type=checkbox][data-template]:checked')]
+            const problems = [...event.target.querySelectorAll('input[type=checkbox][data-pattern]:checked')]
                 .filter((box) => !box.defaultChecked)
-                .map((box) => ({ box, r: this.result(box.dataset.template, box.value) }))
+                .map((box) => ({ box, r: this.result(box.dataset.pattern, box.value) }))
                 .filter(({ r }) => r && r.status !== 'ok')
                 .map(({ box, r }) => `${box.dataset.task} – ${r.name}: ${issueText(r)}`);
             if (!problems.length) return;

@@ -8,6 +8,7 @@ use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Skill;
 use App\Models\VacationBalance;
+use App\Rules\PhoneNumber;
 use App\Services\Audit;
 use App\Services\AvailabilityEnforcer;
 use App\Services\ConflictChecker;
@@ -75,12 +76,27 @@ class EmployeeController extends Controller
     public function show(Request $request, Employee $employee, EmployeeOverview $overview): View
     {
         $date = rescue(fn () => CarbonImmutable::parse((string) $request->query('week', 'today')), null, false);
-        $employee->load(['fixedTemplates.building:id,name,color', 'fixedTemplates.patterns', 'user']);
+        $employee->load(['fixedPatterns.template.building:id,name,color', 'user']);
+
+        // Vaste taken, met per taak alleen de patronen waarop deze medewerker staat.
+        $fixedTemplates = $employee->fixedPatterns
+            ->filter(fn ($p) => $p->template?->active)
+            ->groupBy('task_template_id')
+            ->map(function ($patterns) {
+                $template = $patterns->first()->template;
+
+                return (object) [
+                    'template' => $template,
+                    'label' => $patterns->sortBy('position')->map(fn ($p) => $p->label().' '.$p->timesLabel($template))->implode('; '),
+                ];
+            })
+            ->sortBy(fn ($row) => [$row->template->building->name, $row->template->start_time])
+            ->values();
 
         return view('employees.show', [
             'employee' => $employee,
             'overview' => $overview->build($employee, $date),
-            'fixedTemplates' => $employee->fixedTemplates->where('active', true)->sortBy(fn ($t) => [$t->building->name, $t->start_time])->values(),
+            'fixedTemplates' => $fixedTemplates,
             'counterYear' => $year = (int) now()->year,
             'counters' => app(LeaveCounters::class)->counters($employee, $year),
             'balance' => app(LeaveCounters::class)->balance($employee, $year),
@@ -205,7 +221,7 @@ class EmployeeController extends Controller
                 $needsLogin ? Rule::unique('users', 'email')->ignore($account) : null,
             ]),
             'invite' => ['boolean'],
-            'phone' => ['nullable', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:50', new PhoneNumber],
             'color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'contract_hours_min' => ['nullable', 'numeric', 'min:0', 'max:80'],
             'contract_hours_max' => array_filter(['nullable', 'numeric', 'min:0', 'max:80', $request->filled('contract_hours_min') ? 'gte:contract_hours_min' : null]),

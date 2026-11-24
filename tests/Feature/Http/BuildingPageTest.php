@@ -26,7 +26,7 @@ class BuildingPageTest extends TestCase
         $building = Building::factory()->create();
         $template = TaskTemplate::factory()->weekly([1, 2, 3, 4, 5])->create(['building_id' => $building->id, 'name' => 'Toilettenronde', 'start_time' => '08:00', 'end_time' => '09:30', 'valid_from' => '2026-10-01']);
         $anna = Employee::factory()->create(['name' => 'Anna Jansen']);
-        $template->employees()->attach($anna);
+        $this->assignFixed($template, $anna);
 
         $response = $this->get(route('buildings.show', $building))->assertOk();
 
@@ -41,6 +41,28 @@ class BuildingPageTest extends TestCase
 
         $this->get(route('buildings.show', [$building, 'week' => '2026-10-20']))
             ->assertOk()->assertSee('week 43')->assertSee('ma. 19 okt.');
+    }
+
+    public function test_shows_staff_hours_of_fixed_tasks(): void
+    {
+        $building = Building::factory()->create();
+        // Ma t/m vr 1,5 uur met 2 personen = 15 u per week; Anna staat er vast op, de tweede plek is open.
+        $daily = TaskTemplate::factory()->weekly([1, 2, 3, 4, 5])->create(['building_id' => $building->id, 'name' => 'Toilettenronde', 'start_time' => '08:00', 'end_time' => '09:30', 'required_staff' => 2, 'valid_from' => '2026-10-01']);
+        $anna = Employee::factory()->create(['name' => 'Anna Jansen']);
+        $this->assignFixed($daily, $anna);
+        // Om de week op woensdag 2 uur = gemiddeld 1 u per week.
+        TaskTemplate::factory()->weekly([3], 2)->create(['building_id' => $building->id, 'name' => 'Glas', 'start_time' => '10:00', 'end_time' => '12:00', 'valid_from' => '2026-10-12']);
+        // Een inactieve taak telt niet mee.
+        TaskTemplate::factory()->weekly([1])->create(['building_id' => $building->id, 'name' => 'Oud', 'active' => false, 'valid_from' => '2026-10-01']);
+
+        $this->get(route('buildings.show', $building))->assertOk()
+            ->assertSeeInOrder(['16 u', 'personeel per week'])
+            ->assertSee('15 u personeel per week')
+            ->assertSeeInOrder(['1 u personeel per week', '(gemiddeld)'])
+            // Week 42 (12–18 okt): 15 u Toilettenronde + 2 u Glas nodig, alleen Anna's 7,5 u is ingepland.
+            ->assertSeeInOrder(['Vaste taken deze week:', '7,5 u', 'ingepland van 17 u', '9,5 u open'])
+            ->assertSeeInOrder(['Anna Jansen', '7,5 u'])
+            ->assertSee('7,5 / 15 u');
     }
 
     public function test_one_off_shifts_get_their_own_row_and_weekend_shows_when_needed(): void
@@ -63,11 +85,11 @@ class BuildingPageTest extends TestCase
 
         $this->put(route('buildings.staffing', $building), [
             'staff' => [$a->id => 3, $b->id => 1],
-            'fixed' => [$a->id => [$e1->id, $e2->id, $e3->id], $b->id => [$e2->id]],
+            'fixed' => [$a->patterns->first()->id => [$e1->id, $e2->id, $e3->id], $b->patterns->first()->id => [$e2->id]],
         ])->assertRedirect(route('buildings.show', $building))->assertSessionHasNoErrors();
 
         $this->assertSame(3, $a->fresh()->required_staff);
-        $this->assertEqualsCanonicalizing([$e1->id, $e2->id, $e3->id], $a->employees()->pluck('employees.id')->all());
+        $this->assertEqualsCanonicalizing([$e1->id, $e2->id, $e3->id], $this->fixedIds($a));
         $this->assertEqualsCanonicalizing([$e1->id, $e2->id, $e3->id], $building->employees()->pluck('employees.id')->all());
 
         $wednesday = Shift::where('task_template_id', $a->id)->whereDate('date', '2026-10-14')->first();
@@ -85,10 +107,22 @@ class BuildingPageTest extends TestCase
         $shift = Shift::where('task_template_id', $template->id)->whereDate('date', '2026-10-14')->first();
         $shift->update(['is_modified' => true]);
 
-        $this->put(route('buildings.staffing', $building), ['fixed' => [$template->id => [$employee->id]]]);
+        $this->put(route('buildings.staffing', $building), ['fixed' => [$template->patterns->first()->id => [$employee->id]]]);
 
         $this->assertSame(0, $shift->assignments()->count());
         $this->assertSame(1, Shift::where('task_template_id', $template->id)->whereDate('date', '2026-10-21')->first()->assignments()->count());
+    }
+
+    public function test_short_name_can_be_set_in_the_form(): void
+    {
+        // Issue #74: korte naam voor de maandweergave, met de automatische afkorting als voorbeeld.
+        $building = Building::factory()->create(['name' => 'JB Ventures']);
+        $this->get(route('buildings.edit', $building))->assertOk()->assertSee('Korte naam')->assertSee('placeholder="JBV"', false);
+
+        $data = ['name' => 'JB Ventures', 'color' => '#336699', 'active' => '1'];
+        $this->put(route('buildings.update', $building), $data + ['short_name' => 'Ventures'])->assertSessionHasNoErrors();
+        $this->assertSame('Ventures', $building->fresh()->shortLabel());
+        $this->put(route('buildings.update', $building), $data + ['short_name' => 'Veel te lange naam'])->assertSessionHasErrors('short_name');
     }
 
     public function test_staffing_rejects_template_of_other_building(): void
@@ -97,7 +131,7 @@ class BuildingPageTest extends TestCase
         $other = TaskTemplate::factory()->create();
         $employee = Employee::factory()->create();
 
-        $this->put(route('buildings.staffing', $building), ['fixed' => [$other->id => [$employee->id]]])->assertStatus(422);
-        $this->assertSame(0, $other->employees()->count());
+        $this->put(route('buildings.staffing', $building), ['fixed' => [$other->patterns->first()->id => [$employee->id]]])->assertStatus(422);
+        $this->assertSame([], $this->fixedIds($other));
     }
 }

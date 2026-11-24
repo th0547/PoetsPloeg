@@ -7,6 +7,7 @@ use App\Models\Building;
 use App\Models\Employee;
 use App\Models\Skill;
 use App\Models\TaskTemplate;
+use App\Models\TaskTemplatePattern;
 use App\Models\User;
 use App\Services\AbsenceService;
 use App\Services\ShiftGenerator;
@@ -90,10 +91,10 @@ class DemoSeeder extends Seeder
                 'start_time' => $start, 'end_time' => $end, 'required_staff' => $staff,
                 'valid_from' => $validFrom, 'skip_holidays' => true, 'active' => true,
             ]);
-            $daily->patterns()->create(['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => $days]);
+            $pattern = $daily->patterns()->create(['recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => $days, 'start_time' => $start, 'end_time' => $end]);
             $daily->skills()->attach([$skills['Algemeen']->id, $skills['Sanitair']->id]);
             $daily->load('skills');
-            $this->assignFixed($daily, $employees, $building, $days, $start, $end, $staff);
+            $this->assignFixed($daily, $pattern, $employees, $building, $days, $start, $end, $staff);
 
             if ($i % 2 === 0) {
                 $glass = TaskTemplate::create([
@@ -101,7 +102,7 @@ class DemoSeeder extends Seeder
                     'start_time' => '08:00', 'end_time' => '12:00', 'required_staff' => 1,
                     'valid_from' => $validFrom->addDays($i % 14), 'skip_holidays' => true, 'active' => true,
                 ]);
-                $glass->patterns()->create(['recurrence' => 'weekly', 'repeat_every' => 4, 'weekdays' => [($i % 5) + 1]]);
+                $glass->patterns()->create(['recurrence' => 'weekly', 'repeat_every' => 4, 'weekdays' => [($i % 5) + 1], 'start_time' => '08:00', 'end_time' => '12:00']);
                 $glass->skills()->attach($skills['Glasbewassing']->id);
             }
 
@@ -111,7 +112,7 @@ class DemoSeeder extends Seeder
                     'start_time' => '09:00', 'end_time' => '13:00', 'required_staff' => 2,
                     'valid_from' => $validFrom, 'skip_holidays' => true, 'active' => true,
                 ]);
-                $floor->patterns()->create(['recurrence' => 'monthly_nth_weekday', 'repeat_every' => 1, 'nth' => ($i % 4) + 1, 'weekday' => 6]);
+                $floor->patterns()->create(['recurrence' => 'monthly_nth_weekday', 'repeat_every' => 1, 'nth' => ($i % 4) + 1, 'weekday' => 6, 'start_time' => '09:00', 'end_time' => '13:00']);
                 $floor->skills()->attach($skills['Vloeronderhoud']->id);
             }
         }
@@ -123,12 +124,30 @@ class DemoSeeder extends Seeder
             'start_time' => '18:00', 'end_time' => '20:00', 'required_staff' => 1,
             'valid_from' => $validFrom, 'skip_holidays' => true, 'active' => true,
         ]);
-        $alternating->patterns()->create(['position' => 0, 'recurrence' => 'weekly', 'repeat_every' => 2, 'weekdays' => [4], 'starts_on' => $validFrom]);
+        $alternating->patterns()->create(['position' => 0, 'recurrence' => 'weekly', 'repeat_every' => 2, 'weekdays' => [4], 'starts_on' => $validFrom, 'start_time' => '18:00', 'end_time' => '20:00']);
         $alternating->patterns()->create([
             'position' => 1, 'recurrence' => 'weekly', 'repeat_every' => 2, 'weekdays' => [1],
             'starts_on' => $validFrom->addWeek(), 'start_time' => '07:00', 'end_time' => '09:00',
         ]);
-        $alternating->patterns()->create(['position' => 2, 'recurrence' => 'rrule', 'rrule' => 'FREQ=MONTHLY;BYDAY=-1FR', 'starts_on' => $validFrom]);
+        $alternating->patterns()->create(['position' => 2, 'recurrence' => 'rrule', 'rrule' => 'FREQ=MONTHLY;BYDAY=-1FR', 'starts_on' => $validFrom, 'start_time' => '18:00', 'end_time' => '20:00']);
+
+        // Voorbeeld van vaste bezetting per patroon: om de dag een ander, op andere tijden.
+        $kitchen = TaskTemplate::create([
+            'building_id' => $buildings[1]->id, 'name' => 'Kantine',
+            'description' => 'Om de dag: ma, wo en vr de één, di en do de ander.',
+            'start_time' => '17:00', 'end_time' => '19:00', 'required_staff' => 1,
+            'valid_from' => $validFrom, 'skip_holidays' => true, 'active' => true,
+        ]);
+        $kitchen->skills()->attach($skills['Algemeen']->id);
+        $kitchen->load('skills');
+        foreach ([[[1, 3, 5], '17:00', '19:00'], [[2, 4], '18:00', '19:00']] as $position => [$kitchenDays, $from, $until]) {
+            $pattern = $kitchen->patterns()->create([
+                'position' => $position, 'recurrence' => 'weekly', 'repeat_every' => 1, 'weekdays' => $kitchenDays,
+                'start_time' => $from, 'end_time' => $until,
+            ]);
+            // Een ander dan op het vorige patroon.
+            $this->assignFixed($kitchen, $pattern, $employees->whereNotIn('id', $kitchen->patterns()->first()->employees()->pluck('employees.id')), $buildings[1], $kitchenDays, $from, $until, 1);
+        }
 
         // Wat verlof en een zieke medewerker.
         $today = CarbonImmutable::today();
@@ -143,7 +162,7 @@ class DemoSeeder extends Seeder
         app(ShiftGenerator::class)->generateAhead();
 
         // Ziekmelding vandaag: wordt via de AbsenceService verwerkt zodat er open diensten ontstaan.
-        $sick = $employees->first(fn ($e) => $e->fixedTemplates()->exists());
+        $sick = $employees->first(fn ($e) => $e->fixedPatterns()->exists());
         if ($sick) {
             $absence = Absence::create([
                 'employee_id' => $sick->id, 'type' => 'ziek',
@@ -153,7 +172,7 @@ class DemoSeeder extends Seeder
         }
     }
 
-    private function assignFixed(TaskTemplate $template, $employees, Building $building, array $days, string $start, string $end, int $staff): void
+    private function assignFixed(TaskTemplate $template, TaskTemplatePattern $pattern, $employees, Building $building, array $days, string $start, string $end, int $staff): void
     {
         $s = $this->minutes($start);
         $e = $this->minutes($end);
@@ -171,7 +190,7 @@ class DemoSeeder extends Seeder
                 continue;
             }
 
-            $template->employees()->attach($employee->id, ['position' => $picked]);
+            $pattern->employees()->attach($employee->id, ['position' => $picked]);
             $employee->skills()->syncWithoutDetaching($template->skills->pluck('id'));
             $building->employees()->syncWithoutDetaching([$employee->id]);
             foreach ($days as $d) {

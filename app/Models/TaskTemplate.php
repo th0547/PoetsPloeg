@@ -40,12 +40,6 @@ class TaskTemplate extends Model
         return $this->belongsToMany(Skill::class);
     }
 
-    /** Vaste bezetting. */
-    public function employees(): BelongsToMany
-    {
-        return $this->belongsToMany(Employee::class)->withPivot('position')->orderByPivot('position');
-    }
-
     public function shifts(): HasMany
     {
         return $this->hasMany(Shift::class);
@@ -57,20 +51,58 @@ class TaskTemplate extends Model
         return $this->hasMany(TaskTemplatePattern::class)->orderBy('position')->orderBy('id');
     }
 
-    /** Leesbare omschrijving van de herhaling, bijv. "Om de week op do; om de week op ma (07:00–09:00)". */
+    /** Leesbare omschrijving met tijden, bijv. "Elke week op ma, wo, vr 10:00–12:00; Elke week op di, do 12:00–13:00". */
     public function recurrenceLabel(): string
     {
         return $this->patterns
-            ->map(fn (TaskTemplatePattern $p) => $p->label().($p->hasOwnTimes() ? ' ('.substr($p->start_time, 0, 5).'–'.substr($p->end_time, 0, 5).')' : ''))
+            ->map(fn (TaskTemplatePattern $p) => $p->label().' '.$p->timesLabel($this))
             ->implode('; ');
     }
 
-    /** Tijden voor in lijsten: "18:00–20:00", of met "e.a." als patronen eigen tijden hebben. */
+    /** Tijden voor in lijsten: "18:00–20:00", of met "e.a." als de patronen verschillende tijden hebben. */
     public function timesLabel(): string
     {
-        $label = substr($this->start_time, 0, 5).'–'.substr($this->end_time, 0, 5);
+        $labels = $this->patterns->map(fn (TaskTemplatePattern $p) => $p->timesLabel($this))->unique()->values();
+        if ($labels->isEmpty()) {
+            return substr((string) $this->start_time, 0, 5).'–'.substr((string) $this->end_time, 0, 5);
+        }
 
-        return $this->patterns->contains(fn (TaskTemplatePattern $p) => $p->hasOwnTimes()) ? $label.' e.a.' : $label;
+        return $labels->count() > 1 ? $labels->first().' e.a.' : $labels->first();
+    }
+
+    /**
+     * Iedereen die vast op een van de patronen staat (relatie patterns.employees geladen).
+     *
+     * @return Collection<int, Employee>
+     */
+    public function staff(): Collection
+    {
+        return $this->patterns->flatMap(fn (TaskTemplatePattern $p) => $p->employees)->unique('id')->values();
+    }
+
+    /**
+     * De vaste krachten voor deze dienst: die van het patroon van de dienst. Is dat patroon niet meer bekend
+     * (oude dienst), dan het patroon dat op die dag en begintijd valt, en anders iedereen van de taak.
+     *
+     * @return Collection<int, Employee>
+     */
+    public function staffFor(Shift $shift): Collection
+    {
+        $this->loadMissing('patterns.employees');
+        $pattern = $this->patterns->firstWhere('id', $shift->task_template_pattern_id)
+            ?? $this->patternsOn(CarbonImmutable::instance($shift->starts_at))
+                ->first(fn (TaskTemplatePattern $p) => substr($p->startTime($this), 0, 5) === $shift->starts_at->format('H:i'));
+
+        return $pattern ? $pattern->employees : $this->staff();
+    }
+
+    /** De tijden van de taak volgen het eerste patroon (voor de volgorde in lijsten). */
+    public function syncTimesFromPatterns(): void
+    {
+        $first = $this->patterns()->first();
+        if ($first && $first->hasOwnTimes()) {
+            $this->forceFill(['start_time' => $first->start_time, 'end_time' => $first->end_time])->saveQuietly();
+        }
     }
 
     /** Valt de taak op deze dag (binnen de geldigheidsperiode en in een van de patronen)? */
@@ -82,14 +114,19 @@ class TaskTemplate extends Model
     /** De patronen die op deze dag vallen. */
     public function patternsOn(CarbonImmutable $day): Collection
     {
-        $day = $day->startOfDay();
-        if ($day->lt(CarbonImmutable::instance($this->valid_from)->startOfDay())) {
-            return collect();
-        }
-        if ($this->valid_until && $day->gt(CarbonImmutable::instance($this->valid_until)->startOfDay())) {
+        if (! $this->validOn($day)) {
             return collect();
         }
 
-        return $this->patterns->filter(fn (TaskTemplatePattern $p) => $p->occursOn($day, $this))->values();
+        return $this->patterns->filter(fn (TaskTemplatePattern $p) => $p->occursOn($day->startOfDay(), $this))->values();
+    }
+
+    /** Valt deze dag binnen de geldigheidsperiode (Vanaf / Tot en met)? */
+    public function validOn(CarbonImmutable $day): bool
+    {
+        $day = $day->startOfDay();
+
+        return ! $day->lt(CarbonImmutable::instance($this->valid_from)->startOfDay())
+            && ! ($this->valid_until && $day->gt(CarbonImmutable::instance($this->valid_until)->startOfDay()));
     }
 }
