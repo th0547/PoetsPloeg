@@ -38,7 +38,7 @@ class ReplacementFinder
                 'ink' => Planning::contrast($employee->color),
                 'initials' => Planning::initials($employee->name),
                 'week_hours' => $checks['week_hours'],
-                'reasons' => $this->reasons($checks),
+                'reasons' => $this->reasons($checks, $results[$employee->id]['warnings']),
                 'warnings' => $results[$employee->id]['warnings'],
                 // Wat deze medewerker die dag al doet: helpt inschatten of invallen praktisch past.
                 'day_shifts' => $this->checker->dayShifts($employee->id, $shift->starts_at, $shift->id),
@@ -81,10 +81,14 @@ class ReplacementFinder
         return $score;
     }
 
+    /** Waarschuwingen die hieronder al een eigen reden hebben. */
+    private const COVERED = ['absent', 'overlap', 'availability', 'request', 'skill', 'building', 'hours'];
+
     /**
+     * @param  list<array{type: string, level: string, message: string}>  $warnings  van de ConflictChecker
      * @return list<array{ok: bool|null, text: string}>
      */
-    private function reasons(array $checks): array
+    private function reasons(array $checks, array $warnings = []): array
     {
         $reasons = [];
 
@@ -119,6 +123,16 @@ class ReplacementFinder
         $hours = $this->num($checks['week_hours']).' → '.$this->num($checks['new_week_hours']).' u'
             .($max !== null ? ' (max '.$this->num($max).')' : '');
         $reasons[] = ['ok' => $max === null ? null : $checks['new_week_hours'] <= $max, 'text' => 'Week: '.$hours];
+
+        // Overige waarschuwingen (rusttijd, dienstduur, wettelijke weekgrens, niet actief): zo is bij "Let op" altijd
+        // te zien waarom (issue #69). Een info-melding (bijv. ingekorte rust die mag) is een minpunt, geen bezwaar.
+        foreach ($warnings as $warning) {
+            if (! in_array($warning['type'], self::COVERED, true)) {
+                $reasons[] = $warning['level'] === ConflictChecker::INFO
+                    ? ['ok' => false, 'soft' => true, 'text' => $warning['message']]
+                    : ['ok' => false, 'text' => $warning['message']];
+            }
+        }
 
         return $reasons;
     }
