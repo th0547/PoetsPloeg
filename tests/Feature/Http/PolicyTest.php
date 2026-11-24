@@ -175,21 +175,23 @@ class PolicyTest extends TestCase
     public function test_planners_can_preview_the_employee_view(): void
     {
         $this->actingAs(User::factory()->create())->get(route('policy.preview'))->assertOk()
-            ->assertSee('Zo zien medewerkers het')->assertSee('Je rooster is uiterlijk 4 weken van tevoren bekend.');
+            ->assertSee('Zo zien medewerkers het')->assertSee('Je rooster is uiterlijk 4 weken van tevoren bekend.')
+            ->assertSee('Binnen elke 24 uur heb je minstens 11 uur aaneengesloten rust.')
+            ->assertSee('Eén keer per week mag die rust korter zijn, maar minstens 8 uur.');
     }
 
     public function test_planning_warns_about_rest_time_and_long_shifts(): void
     {
         $employee = Employee::factory()->create();
-        $evening = Shift::factory()->at('2026-11-16', '17:00', '22:00')->create();
+        $evening = Shift::factory()->at('2026-11-16', '17:00', '23:00')->create();
         $evening->assignments()->create(['employee_id' => $employee->id]);
         $morning = Shift::factory()->at('2026-11-17', '06:00', '10:00')->create();
         $long = Shift::factory()->at('2026-11-19', '06:00', '19:00')->create();
 
         $checker = app(ConflictChecker::class);
         $rest = collect($checker->forCandidate($morning, $employee->id)['warnings'])->firstWhere('type', 'rest');
-        $this->assertStringContainsString('Rusttijd 8 u', $rest['message']);
-        $this->assertStringContainsString('minimaal 11 u', $rest['message']);
+        $this->assertStringContainsString('Minder dan 11 u aaneengesloten rust', $rest['message']);
+        $this->assertStringContainsString('langste rust 7 u', $rest['message']);
         $this->assertContains('Dienst langer dan 12 uur (Arbeidstijdenwet)', array_column($checker->forCandidate($long, $employee->id)['warnings'], 'message'));
 
         // Uit te zetten via het beleid.
