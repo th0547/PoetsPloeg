@@ -4,16 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Absence;
 use App\Models\Employee;
-use App\Models\Shift;
+use App\Services\AbsenceRegistration;
 use App\Services\AbsenceService;
 use App\Services\Audit;
 use App\Services\LeaveCounters;
-use App\Services\LeaveHours;
 use App\Support\Policy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -76,51 +74,10 @@ class AbsenceController extends Controller
         ]);
     }
 
-    public function store(Request $request, AbsenceService $service, LeaveHours $leaveHours): RedirectResponse
+    public function store(Request $request, AbsenceRegistration $registration): RedirectResponse
     {
-        $data = $request->validate([
-            'employee_id' => ['required', 'exists:employees,id'],
-            'type' => ['required', Rule::in(Policy::current()->leaveTypes(true)->keys()->all())],
-            'as_request' => ['boolean'],
-            'days' => ['required', 'array', 'min:1', 'max:366'],
-            'days.*.date' => ['required', 'date_format:Y-m-d', 'distinct'],
-            'days.*.start_time' => ['nullable', 'date_format:H:i'],
-            'days.*.end_time' => ['nullable', 'date_format:H:i'],
-            'note' => ['nullable', 'string', 'max:1000'],
-        ], [
-            'days.required' => 'Kies minimaal één dag in de kalender.',
-        ], [
-            'days.*.date' => 'datum',
-            'days.*.start_time' => 'begintijd',
-            'days.*.end_time' => 'eindtijd',
-        ]);
-
-        $periods = $service->periodsFromDays($data['days']);
-        $asRequest = ($data['as_request'] ?? false) && ! in_array($data['type'], Policy::current()->directTypes(), true);
-
-        $absences = DB::transaction(fn () => collect($periods)->map(fn (array $period) => Absence::create([
-            'employee_id' => $data['employee_id'],
-            'type' => $data['type'],
-            'starts_at' => $period[0],
-            'ends_at' => $period[1],
-            'note' => $data['note'] ?? null,
-        ])));
-
-        if ($asRequest) {
-            $absences->each(fn (Absence $absence) => $service->submitRequest($absence));
-            $shiftCount = $absences->sum(fn (Absence $absence) => $absence->shifts()->count());
-            $message = $this->requestMessage($absences->count(), $shiftCount);
-        } else {
-            $affected = $absences->sum(fn (Absence $absence) => $service->apply($absence)->count());
-            $message = $this->registeredMessage($absences->count(), $affected, $absences->first()->employee->name);
-            // Ziek tijdens vakantie: die uren tellen niet als vakantie (cao art. 29 lid 2).
-            if (Policy::current()->leaveType($data['type'])['counts_as'] === 'sickness') {
-                $moved = $absences->sum(fn (Absence $absence) => $leaveHours->applySickness($absence));
-                if ($moved > 0) {
-                    $message .= ' '.rtrim(rtrim(number_format($moved, 2, ',', ''), '0'), ',').' uur vakantie in deze periode telt nu als ziekte.';
-                }
-            }
-        }
+        $data = $request->validate(...AbsenceRegistration::rules());
+        ['absences' => $absences, 'message' => $message] = $registration->register($data);
 
         // Eén periode: direct door naar de vervangers. Meerdere losse periodes: het overzicht van deze medewerker.
         $target = $absences->count() === 1
@@ -134,34 +91,11 @@ class AbsenceController extends Controller
      * Het vervangscherm: alle diensten die door deze afwezigheid een vervanger nodig hebben, met per
      * dienst de beste kandidaten. Voor directe uitval (ziek) en voor verlofverzoeken.
      */
-    public function show(Absence $absence, AbsenceService $service): View
+    public function show(Absence $absence, AbsenceRegistration $registration): View
     {
         $absence->load('employee');
-        if ($absence->isPending()) {
-            $service->evaluate($absence);
-            $absence->refresh();
-        }
 
-        $rows = $service->requestShifts($absence);
-        $linked = $rows->isNotEmpty();
-        if (! $linked && $absence->status === 'approved') {
-            // Oudere registratie, van vóór het vastleggen van de vrijgemaakte diensten: toon alle
-            // open diensten in de periode.
-            $rows = Shift::query()->active()->understaffed()
-                ->overlapping($absence->starts_at, $absence->ends_at)
-                ->where('ends_at', '>', now())
-                ->with(['building', 'assignments.employee'])
-                ->orderBy('starts_at')
-                ->get()
-                ->map(fn (Shift $shift) => ['shift' => $shift, 'state' => 'open']);
-        }
-
-        return view('absences.show', [
-            'absence' => $absence,
-            'rows' => $rows,
-            // Bij een gekoppelde lijst weten we welke diensten van deze medewerker waren.
-            'linked' => $linked,
-        ]);
+        return view('absences.show', ['absence' => $absence] + $registration->replacements($absence));
     }
 
     /** CSV per medewerker per soort voor de loonadministratie (issue #44). */
@@ -206,30 +140,5 @@ class AbsenceController extends Controller
 
         return redirect()->route('absences.index', ['medewerker' => $absence->employee_id, 'status' => 'ingetrokken', 'periode' => 'alles'])
             ->with('status', 'Afwezigheid ingetrokken; de registratie blijft bewaard onder status "Ingetrokken". Controleer de planning: eerder vrijgemaakte diensten worden niet automatisch teruggezet.');
-    }
-
-    private function registeredMessage(int $periods, int $affected, string $name): string
-    {
-        $what = $periods === 1 ? 'Afwezigheid geregistreerd.' : sprintf('Afwezigheid geregistreerd in %d losse periodes.', $periods);
-        if ($affected === 0) {
-            return $what.' Er waren geen diensten ingepland in deze '.($periods === 1 ? 'periode.' : 'periodes.');
-        }
-
-        return $what.sprintf(' %s is van %d dienst(en) gehaald; ', $name, $affected)
-            .($periods === 1 ? 'zoek hieronder een vervanger.' : 'open een periode om vervangers te zoeken.');
-    }
-
-    private function requestMessage(int $requests, int $shifts): string
-    {
-        if ($shifts === 0) {
-            return $requests === 1
-                ? 'Verlofverzoek direct goedgekeurd: er stonden geen diensten in deze periode.'
-                : sprintf('%d verlofverzoeken direct goedgekeurd: er stonden geen diensten in deze periodes.', $requests);
-        }
-        $todo = sprintf('Zoek voor %d %s een vervanger; daarna wordt het verlof automatisch goedgekeurd.', $shifts, $shifts === 1 ? 'dienst' : 'diensten');
-
-        return $requests === 1
-            ? 'Verlofverzoek ingediend. '.$todo
-            : sprintf('%d verlofverzoeken ingediend (losse periodes). ', $requests).$todo;
     }
 }

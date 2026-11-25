@@ -46,7 +46,19 @@ Inloggen en uitloggen in de app komen in het logboek (`auth.app_login`, `auth.ap
 | `POST` | `shifts/{id}/assignments` | Inplannen: `employee_id`, eventueel `replace_employee_id` en `confirm`. Zijn er waarschuwingen en is `confirm` niet `true`, dan komt `{ needs_confirmation: true, warnings }` terug en wordt er nog niets opgeslagen. |
 | `DELETE` | `shifts/{id}/assignments/{employee}` | Een medewerker van een dienst halen. |
 | `GET` | `search?q=` | Zoeken naar medewerkers en panden. |
+| `GET` | `employees` | Actieve medewerkers (naam en kleur), voor keuzelijsten. |
 | `GET` | `employees/{id}?datum=` | Waar is een medewerker nu, plus zijn dag en week. |
+
+## Afwezigheid en verlofverzoeken
+
+| Methode | Pad | Wat |
+|---|---|---|
+| `GET` | `leave-types` | Soorten afwezigheid uit het beleid: `key`, `name`, `group` en `can_be_request`. Direct geregistreerde soorten, zoals ziek, kunnen geen verzoek zijn. |
+| `GET` | `absences?status=pending\|approved\|rejected&period=current\|past\|all&employee_id=` | Afwezigheden, 50 per pagina (`data`, `links`, `meta`). |
+| `POST` | `absences` | Uitval of verlof registreren: `employee_id`, `type`, `days[]` (`date`, eventueel `start_time` en `end_time`), `as_request`, `note`. Dagen die op elkaar aansluiten worden één periode. Direct: de medewerker gaat meteen van de diensten af. Als verzoek: de medewerker blijft ingepland tot elke dienst een vervanger heeft; dan wordt het verzoek automatisch goedgekeurd. Antwoord: `201` met `{ message, absences }`. |
+| `GET` | `absences/{id}` | Het vervangscherm. `shifts[]` bevat per dienst een `state`: `todo` (de aanvrager staat er nog op), `open` (plek open) of `done` (vervangen of geannuleerd). Vervangers zoek je met `shifts/{id}/candidates` en plan je in met `shifts/{id}/assignments` (eventueel met `replace_employee_id`). |
+| `POST` | `absences/{id}/reject` | Een openstaand verzoek afwijzen. |
+| `DELETE` | `absences/{id}` | Intrekken. Telt niet meer mee, maar blijft bewaard in de geschiedenis. |
 
 ## Vormen
 

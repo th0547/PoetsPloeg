@@ -4,7 +4,9 @@ use App\Http\Controllers\Api\EmployeeApiController;
 use App\Http\Controllers\Api\PlanningApiController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\ShiftApiController;
+use App\Http\Controllers\Api\V1\AbsenceController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\EmployeeController;
 use App\Http\Controllers\Api\V1\OpenShiftController;
 use App\Http\Controllers\Api\V1\TodayController;
 use App\Http\Middleware\EnsureAppAccess;
@@ -29,6 +31,7 @@ Route::name('api.v1.')->group(function () {
         Route::get('planning', [PlanningApiController::class, 'timeline'])->name('planning');
         Route::post('planning/move', [PlanningApiController::class, 'move'])->name('planning.move');
         Route::get('search', SearchController::class)->name('search');
+        Route::get('employees', [EmployeeController::class, 'index'])->name('employees.index');
         Route::get('employees/{employee}', [EmployeeApiController::class, 'show'])->name('employees.show');
 
         Route::get('shifts/{shift}', [ShiftApiController::class, 'show'])->name('shifts.show');
@@ -37,5 +40,12 @@ Route::name('api.v1.')->group(function () {
         Route::get('shifts/{shift}/candidates', [ShiftApiController::class, 'candidates'])->name('shifts.candidates');
         Route::post('shifts/{shift}/assignments', [ShiftApiController::class, 'assign'])->name('shifts.assign');
         Route::delete('shifts/{shift}/assignments/{employee}', [ShiftApiController::class, 'unassign'])->name('shifts.unassign');
+
+        Route::get('leave-types', [AbsenceController::class, 'leaveTypes'])->name('leave-types');
+        Route::get('absences', [AbsenceController::class, 'index'])->name('absences.index');
+        Route::post('absences', [AbsenceController::class, 'store'])->name('absences.store');
+        Route::get('absences/{absence}', [AbsenceController::class, 'show'])->name('absences.show');
+        Route::post('absences/{absence}/reject', [AbsenceController::class, 'reject'])->name('absences.reject');
+        Route::delete('absences/{absence}', [AbsenceController::class, 'destroy'])->name('absences.destroy');
     });
 });
