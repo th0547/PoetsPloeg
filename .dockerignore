@@ -17,3 +17,5 @@ database/database.sqlite
 *.log
 # Bronnen (cao, wetteksten) zijn naslag voor ontwikkelaars, niet nodig in de image.
 docs/bronnen
+# De app voor planners (Expo) wordt apart gebouwd met EAS, niet in de server-image.
+mobile

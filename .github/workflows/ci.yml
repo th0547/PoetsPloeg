@@ -48,6 +48,32 @@ jobs:
           php artisan key:generate
           php artisan test
 
+  mobile:
+    name: App voor planners (lint, types, tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Types
+        run: npm run typecheck
+      - name: Tests
+        run: npm test -- --ci
+      # De JavaScript-bundel voor iOS moet te bouwen zijn (de echte build gaat via EAS, zie app.yml).
+      - name: Bundel voor iOS
+        run: npx expo export --platform ios --output-dir /tmp/expo-export
+
   server:
     name: Serverscripts en compose
     runs-on: ubuntu-latest

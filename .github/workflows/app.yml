@@ -1,0 +1,71 @@
+name: App bouwen
+
+# De app voor planners (mobile/) bouwen in de cloud van Expo (EAS) en naar TestFlight sturen.
+# Met de hand starten: Actions → "App bouwen" → Run workflow. Een Mac is niet nodig.
+# Nodig: het secret EXPO_TOKEN, en een App Store Connect API-sleutel die bij Expo is ingesteld
+# (zie mobile/README.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform
+        type: choice
+        options: [ios, android, all]
+        default: ios
+      profile:
+        description: Bouwprofiel (production = naar TestFlight / Play Console)
+        type: choice
+        options: [production, preview]
+        default: production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: EAS build (${{ inputs.platform }}, ${{ inputs.profile }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: EXPO_TOKEN aanwezig
+        working-directory: .
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Het secret EXPO_TOKEN ontbreekt. Zie mobile/README.md."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      - name: Bouwen${{ inputs.profile == 'production' && ' en insturen' || '' }}
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          if [ "$PROFILE" = production ]; then
+            eas build --platform "$PLATFORM" --profile production --non-interactive --auto-submit
+          else
+            eas build --platform "$PLATFORM" --profile preview --non-interactive
+          fi
