@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\User;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -47,6 +48,32 @@ class LoginRequest extends FormRequest
      */
     public function authenticate(): bool
     {
+        $user = $this->validateCredentials();
+        $guard = Auth::guard('web');
+
+        if ($user->hasTwoFactor()) {
+            $this->session()->put(self::TWO_FACTOR_SESSION, [
+                'id' => $user->getKey(),
+                'remember' => $this->boolean('remember'),
+                'expires' => now()->addMinutes(5)->getTimestamp(),
+            ]);
+
+            return true;
+        }
+
+        $guard->login($user, $this->boolean('remember'));
+
+        return false;
+    }
+
+    /**
+     * Controleer e-mail en wachtwoord (met rate-limit), zonder in te loggen. Ook gebruikt door
+     * het inloggen in de app (Api\V1\AuthController).
+     *
+     * @throws ValidationException
+     */
+    public function validateCredentials(): User
+    {
         $this->ensureIsNotRateLimited();
 
         $guard = Auth::guard('web');
@@ -70,19 +97,7 @@ class LoginRequest extends FormRequest
 
         RateLimiter::clear($this->throttleKey());
 
-        if ($user->hasTwoFactor()) {
-            $this->session()->put(self::TWO_FACTOR_SESSION, [
-                'id' => $user->getKey(),
-                'remember' => $this->boolean('remember'),
-                'expires' => now()->addMinutes(5)->getTimestamp(),
-            ]);
-
-            return true;
-        }
-
-        $guard->login($user, $this->boolean('remember'));
-
-        return false;
+        return $user;
     }
 
     /**

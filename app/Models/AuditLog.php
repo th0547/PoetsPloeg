@@ -24,6 +24,8 @@ class AuditLog extends Model
         'auth.failed' => 'Inloggen mislukt',
         'auth.logout' => 'Uitgelogd',
         'auth.2fa_failed' => 'Verkeerde code (2FA)',
+        'auth.app_login' => 'Ingelogd in de app',
+        'auth.app_logout' => 'Uitgelogd in de app',
         'twofactor.enabled' => '2FA aangezet',
         'twofactor.disabled' => '2FA uitgezet',
         'twofactor.reset' => '2FA gereset',

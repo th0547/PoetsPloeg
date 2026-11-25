@@ -10,8 +10,11 @@ use App\Support\Policy;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -30,6 +33,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // App-API (routes/api.php): ruim genoeg voor de app, per token-gebruiker.
+        RateLimiter::for('api', fn (Request $request) => Limit::perMinute(180)->by($request->user()?->id ?: $request->ip()));
+
         // Rechten op één plek. Nu hebben planners en teamleiders dezelfde rechten; zodra er een
         // medewerker-login komt, krijgt die alleen wat hier expliciet wordt toegestaan.
         Gate::define('plan', fn (User $user) => $user->canPlan());

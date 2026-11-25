@@ -8,11 +8,26 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
+
+    /**
+     * App-tokens (api/v1) vervallen zodra het wachtwoord, de rol of de tweestapsverificatie verandert
+     * (bijv. een reset door de teamleider na een verloren telefoon), en als het account verdwijnt.
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (User $user) {
+            if ($user->wasChanged(['password', 'role', 'two_factor_secret'])) {
+                $user->tokens()->delete();
+            }
+        });
+        static::deleting(fn (User $user) => $user->tokens()->delete());
+    }
 
     /**
      * The attributes that are mass assignable.

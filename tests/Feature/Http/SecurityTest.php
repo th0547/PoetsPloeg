@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Http;
 
+use App\Http\Middleware\EnsureAppAccess;
 use App\Models\Employee;
 use App\Models\Shift;
 use App\Models\User;
@@ -20,6 +21,8 @@ class SecurityTest extends TestCase
         'password.store', 'invitation.show', 'invitation.store', 'two-factor.challenge', 'two-factor.show',
         'two-factor.confirm', 'two-factor.recovery-codes', 'two-factor.destroy', 'password.confirm', 'password.update', 'verification.notice', 'verification.verify',
         'verification.send', 'profile.edit', 'profile.update', 'profile.destroy', 'storage.local', 'storage.local.upload',
+        // Inloggen in de app (api/v1): e-mail en wachtwoord, daarna de code.
+        'api.v1.auth.login', 'api.v1.auth.two-factor',
     ];
 
     public function test_every_route_requires_planner_rights_unless_explicitly_allowed(): void
@@ -28,6 +31,8 @@ class SecurityTest extends TestCase
         $open = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route) => $route->getName() && ! str_starts_with($route->uri(), '_') && $route->uri() !== 'up')
             ->reject(fn ($route) => in_array('planner', $route->gatherMiddleware(), true))
+            // De app-API (api/v1) controleert planner-rechten en het token met EnsureAppAccess.
+            ->reject(fn ($route) => in_array(EnsureAppAccess::class, $route->gatherMiddleware(), true))
             // Het medewerkersdeel (/mijn) is alleen voor medewerker-accounts.
             ->reject(fn ($route) => str_starts_with($route->getName(), 'my.') && in_array('employee', $route->gatherMiddleware(), true))
             ->map(fn ($route) => $route->getName())

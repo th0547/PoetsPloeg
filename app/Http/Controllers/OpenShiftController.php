@@ -4,8 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Building;
 use App\Models\Shift;
-use App\Services\FixedStaffCheck;
-use App\Services\ShiftGenerator;
+use App\Services\OpenShifts;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -17,28 +16,15 @@ class OpenShiftController extends Controller
 {
     public const PERIODS = [1 => '1 week', 2 => '2 weken', 4 => '4 weken', 8 => '8 weken'];
 
-    public function __invoke(Request $request, ShiftGenerator $generator, FixedStaffCheck $fixedStaff): View
+    public function __invoke(Request $request, OpenShifts $openShifts): View
     {
         $weeks = array_key_exists($request->integer('weken'), self::PERIODS) ? $request->integer('weken') : 2;
         $buildingId = $request->integer('pand') ?: null;
 
-        $today = CarbonImmutable::today();
-        $until = $today->addWeeks($weeks);
-        $generator->generate($today, $until);
-
-        $shifts = Shift::query()->active()->understaffed()
-            ->where('ends_at', '>', now())
-            ->where('starts_at', '<', $until->addDay())
-            ->when($buildingId, fn ($q) => $q->where('building_id', $buildingId))
-            ->with(['building', 'assignments.employee'])
-            ->orderBy('starts_at')
-            ->get();
-
-        // Waarom staat de plek open? Bij vaste taken: wat er met de vaste kracht is.
-        $missing = $shifts->mapWithKeys(fn (Shift $s) => [$s->id => $fixedStaff->missingOn($s)])->filter()->all();
+        $shifts = $openShifts->upcoming($weeks, $buildingId);
 
         return view('shifts.open', [
-            'missing' => $missing,
+            'missing' => $openShifts->missing($shifts),
             'days' => $shifts->groupBy(fn (Shift $s) => $s->starts_at->toDateString()),
             'shiftCount' => $shifts->count(),
             'slotCount' => $shifts->sum(fn (Shift $s) => $s->openSlots()),

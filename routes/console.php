@@ -14,3 +14,6 @@ Schedule::command('poetsploeg:availability-reminders')->hourlyAt(0);
 
 // Elke nacht: oude regels uit het logboek opruimen (zie config/poetsploeg.php, audit_retention_months).
 Schedule::command('model:prune', ['--model' => [AuditLog::class]])->dailyAt('03:10');
+
+// Elke nacht: verlopen app-tokens (api/v1, zie config/sanctum.php) opruimen.
+Schedule::command('sanctum:prune-expired', ['--hours' => 24])->dailyAt('03:20');
